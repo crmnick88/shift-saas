@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ממשק עובד — ShiftSaaS</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container">
+
+  <div id="screen-loading" class="section active" style="text-align:center; padding:60px 20px;">
+    <div style="font-size:50px; margin-bottom:16px;">⏳</div>
+    <p style="color:#888">טוען...</p>
+  </div>
+
+  <div id="screen-main" class="section">
+    <!-- Header -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+      <div>
+        <h2 id="emp-welcome" style="margin-bottom:2px;">שלום!</h2>
+        <div id="emp-branch-name" style="color:#888; font-size:14px;"></div>
+      </div>
+      <button class="btn sm danger" onclick="logout()">יציאה</button>
+    </div>
+
+    <!-- Tabs -->
+    <div class="nav-tabs">
+      <div class="nav-tab active" onclick="switchTab('tab-constraints')">⚠️ האילוצים שלי</div>
+      <div class="nav-tab" onclick="switchTab('tab-schedule')">📅 הסידור</div>
+    </div>
+
+    <!-- Constraints Tab -->
+    <div id="tab-constraints" class="tab-panel active">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h3 style="margin:0">שבוע: <span id="constraint-week-label">—</span></h3>
+        <div style="display:flex; gap:8px;">
+          <button class="btn sm secondary" onclick="changeWeek(-1)">← שבוע קודם</button>
+          <button class="btn sm secondary" onclick="changeWeek(1)">שבוע הבא →</button>
+        </div>
+      </div>
+
+      <div id="constraint-days-container"></div>
+
+      <button class="btn success" onclick="saveConstraints()">💾 שמור אילוצים</button>
+      <div id="constraints-msg" class="message" style="display:none"></div>
+    </div>
+
+    <!-- Schedule Tab -->
+    <div id="tab-schedule" class="tab-panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h3 style="margin:0">סידור שבוע: <span id="schedule-week-label">—</span></h3>
+        <div style="display:flex; gap:8px;">
+          <button class="btn sm secondary" onclick="changeWeekSchedule(-1)">← שבוע קודם</button>
+          <button class="btn sm secondary" onclick="changeWeekSchedule(1)">שבוע הבא →</button>
+        </div>
+      </div>
+      <div id="my-schedule-container">
+        <p style="color:#aaa; text-align:center; padding:30px;">הסידור טרם פורסם לשבוע זה</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="js/firebase.js"></script>
+<script src="js/employee.js"></script>
+</body>
+</html>

@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>הגדרת סניף — ShiftSaaS</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container">
+  <div class="app-logo">
+    <span class="logo-icon">⚙️</span>
+    <h1>הגדרת הסניף שלך</h1>
+    <p class="tagline">עקוב אחרי 5 השלבים הפשוטים</p>
+  </div>
+
+  <!-- Progress Steps -->
+  <div class="setup-steps" id="setup-steps">
+    <div class="step active" id="step-ind-1">
+      <div class="step-num">1</div>
+      <div class="step-label">פרטים</div>
+    </div>
+    <div class="step" id="step-ind-2">
+      <div class="step-num">2</div>
+      <div class="step-label">משמרות</div>
+    </div>
+    <div class="step" id="step-ind-3">
+      <div class="step-num">3</div>
+      <div class="step-label">מחלקות</div>
+    </div>
+    <div class="step" id="step-ind-4">
+      <div class="step-num">4</div>
+      <div class="step-label">עובדים</div>
+    </div>
+    <div class="step" id="step-ind-5">
+      <div class="step-num">5</div>
+      <div class="step-label">אילוצים</div>
+    </div>
+  </div>
+
+  <!-- ===== STEP 1: Business Info ===== -->
+  <div id="step-1" class="section active">
+    <h2>🏪 פרטי העסק</h2>
+    <div class="form-group">
+      <label>שם העסק / הסניף</label>
+      <input type="text" id="s1-name" placeholder="לדוג׳: סופרמרקט כהן, סניף ראשלצ">
+    </div>
+    <div class="form-group">
+      <label>קוד הסניף לעובדים (ייווצר אוטומטית)</label>
+      <input type="text" id="s1-branch-code" readonly style="background:#f0f0f0; color:#888" placeholder="ייווצר לאחר שמירה">
+    </div>
+    <div class="form-group">
+      <label>כמה ימים בשבוע העסק פועל?</label>
+      <select id="s1-work-days">
+        <option value="5">5 ימים (א׳–ה׳)</option>
+        <option value="6" selected>6 ימים (א׳–ו׳)</option>
+        <option value="7">7 ימים (כל השבוע)</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>שפת הממשק לעובדים</label>
+      <select id="s1-lang">
+        <option value="he">עברית</option>
+        <option value="ar">ערבית</option>
+        <option value="en">אנגלית</option>
+      </select>
+    </div>
+    <button class="btn" onclick="saveStep1()">המשך ←</button>
+    <div id="s1-msg" class="message" style="display:none"></div>
+  </div>
+
+  <!-- ===== STEP 2: Shift Types ===== -->
+  <div id="step-2" class="section">
+    <h2>🕐 סוגי משמרות</h2>
+    <p style="color:#888; margin-bottom:16px;">הגדר את סוגי המשמרות שקיימות בעסק שלך. לדוג׳: בוקר, צהריים, ערב.</p>
+
+    <div id="shift-types-list"></div>
+
+    <hr class="divider">
+    <h3>➕ הוסף סוג משמרת</h3>
+    <div class="card">
+      <div class="form-group">
+        <label>שם המשמרת</label>
+        <input type="text" id="new-shift-name" placeholder="לדוג׳: בוקר, צהריים, ערב, לילה">
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div class="form-group">
+          <label>שעת התחלה</label>
+          <input type="time" id="new-shift-start" value="08:00">
+        </div>
+        <div class="form-group">
+          <label>שעת סיום</label>
+          <input type="time" id="new-shift-end" value="16:00">
+        </div>
+      </div>
+      <button class="btn sm success" onclick="addShiftType()">➕ הוסף משמרת</button>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn secondary" onclick="goStep(1)">← חזרה</button>
+      <button class="btn" onclick="saveStep2()">המשך ←</button>
+    </div>
+    <div id="s2-msg" class="message" style="display:none"></div>
+  </div>
+
+  <!-- ===== STEP 3: Departments ===== -->
+  <div id="step-3" class="section">
+    <h2>🏬 מחלקות</h2>
+    <p style="color:#888; margin-bottom:16px;">הגדר את המחלקות / תפקידים בעסק שלך.</p>
+
+    <div id="dept-list"></div>
+
+    <hr class="divider">
+    <h3>➕ הוסף מחלקה</h3>
+    <div class="card">
+      <div class="form-group">
+        <label>שם המחלקה</label>
+        <input type="text" id="new-dept-name" placeholder="לדוג׳: קופאים, מחסן, שירות לקוחות">
+      </div>
+      <div class="form-group">
+        <label>מינימום עובדים בכל יום</label>
+        <input type="number" id="new-dept-min" value="1" min="0">
+      </div>
+      <div class="form-group">
+        <label>מקסימום עובדים בכל יום (0 = ללא הגבלה)</label>
+        <input type="number" id="new-dept-max" value="0" min="0">
+      </div>
+      <button class="btn sm success" onclick="addDept()">➕ הוסף מחלקה</button>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn secondary" onclick="goStep(2)">← חזרה</button>
+      <button class="btn" onclick="saveStep3()">המשך ←</button>
+    </div>
+    <div id="s3-msg" class="message" style="display:none"></div>
+  </div>
+
+  <!-- ===== STEP 4: Employees ===== -->
+  <div id="step-4" class="section">
+    <h2>👥 עובדים</h2>
+    <p style="color:#888; margin-bottom:16px;">הוסף את העובדים שלך. הם יתחברו עם שם המשתמש והסיסמה שתקבע.</p>
+
+    <div id="emp-list"></div>
+
+    <hr class="divider">
+    <h3>➕ הוסף עובד</h3>
+    <div class="card">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div class="form-group">
+          <label>שם תצוגה</label>
+          <input type="text" id="new-emp-display" placeholder="יוסי כהן">
+        </div>
+        <div class="form-group">
+          <label>שם משתמש (לכניסה)</label>
+          <input type="text" id="new-emp-user" placeholder="YOSI" oninput="this.value=this.value.toUpperCase()">
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div class="form-group">
+          <label>סיסמה</label>
+          <input type="text" id="new-emp-pass" placeholder="סיסמה">
+        </div>
+        <div class="form-group">
+          <label>מחלקה</label>
+          <select id="new-emp-dept">
+            <option value="">-- בחר מחלקה --</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>תפקיד / הערה (אופציונלי)</label>
+        <input type="text" id="new-emp-role" placeholder="לדוג׳: אחראי משמרת, מתמחה">
+      </div>
+      <button class="btn sm success" onclick="addEmployee()">➕ הוסף עובד</button>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn secondary" onclick="goStep(3)">← חזרה</button>
+      <button class="btn" onclick="saveStep4()">המשך ←</button>
+    </div>
+    <div id="s4-msg" class="message" style="display:none"></div>
+  </div>
+
+  <!-- ===== STEP 5: Constraint Types ===== -->
+  <div id="step-5" class="section">
+    <h2>⚠️ סוגי אילוצים</h2>
+    <p style="color:#888; margin-bottom:16px;">הגדר אילו אילוצים עובד יכול לבקש. לדוג׳: "לא רוצה בוקר", "חופש מלא", "רוצה ערב".</p>
+
+    <div id="constraint-types-list"></div>
+
+    <hr class="divider">
+    <h3>➕ הוסף סוג אילוץ</h3>
+    <div class="card">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div class="form-group">
+          <label>תווית (מה העובד רואה)</label>
+          <input type="text" id="new-ct-label" placeholder="לדוג׳: ❌ לא בוקר">
+        </div>
+        <div class="form-group">
+          <label>ערך פנימי (קוד)</label>
+          <input type="text" id="new-ct-value" placeholder="לדוג׳: no-morning" oninput="this.value=this.value.toLowerCase().replace(/ /g,'-')">
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div class="form-group">
+          <label>קטגוריה</label>
+          <select id="new-ct-category">
+            <option value="preference">העדפה (רוצה / לא רוצה)</option>
+            <option value="absence">היעדרות (חופש / מחלה)</option>
+            <option value="custom">אחר</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>חל על</label>
+          <select id="new-ct-scope">
+            <option value="all">כל העובדים</option>
+            <option value="dept">מחלקה ספציפית</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn sm success" onclick="addConstraintType()">➕ הוסף אילוץ</button>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn secondary" onclick="goStep(4)">← חזרה</button>
+      <button class="btn success" onclick="finishSetup()">✅ סיים הגדרה — כניסה למערכת</button>
+    </div>
+    <div id="s5-msg" class="message" style="display:none"></div>
+  </div>
+
+</div><!-- /container -->
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="js/firebase.js"></script>
+<script src="js/setup.js"></script>
+</body>
+</html>

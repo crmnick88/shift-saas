@@ -1,0 +1,371 @@
+/* ===========================================
+   ShiftSaaS - מערכת ניהול סידור עבודה
+   =========================================== */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+  padding: 20px;
+  direction: rtl;
+}
+
+.container {
+  max-width: 960px;
+  margin: 0 auto;
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  padding: 30px;
+}
+
+h1 {
+  text-align: center;
+  color: #667eea;
+  margin-bottom: 10px;
+  font-size: 2.2em;
+}
+
+h2 { color: #444; margin-bottom: 20px; font-size: 1.5em; }
+h3 { color: #555; margin-bottom: 12px; }
+
+/* ---- Sections ---- */
+.section { display: none; }
+.section.active { display: block; }
+
+/* ---- Buttons ---- */
+.btn {
+  width: 100%;
+  padding: 14px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 17px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s;
+  margin-top: 10px;
+}
+.btn:hover { background: #5568d3; transform: translateY(-2px); }
+.btn.secondary {
+  background: white;
+  color: #667eea;
+  border: 2px solid #667eea;
+}
+.btn.secondary:hover { background: #f0f3ff; }
+.btn.danger { background: #dc3545; }
+.btn.danger:hover { background: #b02a37; }
+.btn.success { background: #28a745; }
+.btn.success:hover { background: #1e7e34; }
+.btn.sm {
+  width: auto;
+  padding: 8px 16px;
+  font-size: 14px;
+  margin-top: 0;
+  border-radius: 8px;
+}
+
+.btn-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.btn-row .btn { flex: 1; min-width: 120px; }
+
+/* ---- Mode buttons (landing) ---- */
+.mode-btn {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  padding: 26px 40px;
+  margin: 14px auto;
+  border: 3px solid #667eea;
+  background: white;
+  color: #667eea;
+  border-radius: 14px;
+  cursor: pointer;
+  font-size: 22px;
+  font-weight: bold;
+  transition: all 0.3s;
+  box-shadow: 0 4px 12px rgba(102,126,234,0.15);
+  text-align: center;
+}
+.mode-btn:hover {
+  background: #667eea;
+  color: white;
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(102,126,234,0.4);
+}
+.mode-btn .icon { font-size: 30px; display: block; margin-bottom: 8px; }
+
+/* ---- Forms ---- */
+.form-group { margin-bottom: 16px; }
+label { display: block; margin-bottom: 5px; font-weight: bold; color: #555; }
+input, select, textarea {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 16px;
+  font-family: inherit;
+  transition: border 0.2s;
+  direction: rtl;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: #667eea;
+}
+textarea { resize: vertical; min-height: 80px; }
+
+/* ---- Messages ---- */
+.message {
+  padding: 14px;
+  border-radius: 8px;
+  margin-top: 18px;
+  text-align: center;
+  font-weight: bold;
+  white-space: pre-line;
+}
+.message.success { background: #d4edda; color: #155724; }
+.message.error   { background: #f8d7da; color: #721c24; }
+.message.info    { background: #cce5ff; color: #004085; }
+
+/* ---- Cards ---- */
+.card {
+  background: #f8f9ff;
+  border: 2px solid #e8ecff;
+  border-radius: 12px;
+  padding: 18px;
+  margin-bottom: 14px;
+}
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.card-title { font-weight: bold; font-size: 17px; color: #444; }
+
+/* ---- Tags/Badges ---- */
+.badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: bold;
+  margin: 2px;
+}
+.badge.blue   { background: #cce5ff; color: #004085; }
+.badge.green  { background: #d4edda; color: #155724; }
+.badge.yellow { background: #fff3cd; color: #856404; }
+.badge.red    { background: #f8d7da; color: #721c24; }
+.badge.purple { background: #e7d4f5; color: #5a1a7a; }
+
+/* ---- Toolbar ---- */
+.toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  align-items: center;
+}
+
+/* ---- Schedule Table ---- */
+.schedule-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+  background: white;
+  border-radius: 10px;
+  overflow: hidden;
+  font-size: 14px;
+}
+.schedule-table th {
+  background: #667eea;
+  color: white;
+  padding: 12px 8px;
+  text-align: center;
+  min-width: 90px;
+}
+.schedule-table td {
+  padding: 10px 8px;
+  text-align: center;
+  border: 1px solid #e0e0e0;
+  vertical-align: middle;
+}
+.schedule-table tr:hover td { background: #f5f7ff; }
+
+.dept-divider td {
+  background: #667eea !important;
+  color: white !important;
+  font-weight: bold;
+  text-align: center !important;
+  font-size: 15px;
+  padding: 10px !important;
+  border: none !important;
+}
+
+/* ---- Shift Chips ---- */
+.shift-chip {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: bold;
+  line-height: 1.5;
+}
+.shift-off     { background: #f0f0f0; color: #999; }
+.shift-color-0 { background: #fff3cd; color: #856404; }
+.shift-color-1 { background: #ffd4a3; color: #7a4100; }
+.shift-color-2 { background: #d1ecf1; color: #0c5460; }
+.shift-color-3 { background: #d4edda; color: #155724; }
+.shift-color-4 { background: #e7d4f5; color: #5a1a7a; }
+.shift-color-5 { background: #fce4ec; color: #880e4f; }
+
+/* ---- Employee Constraint Card ---- */
+.emp-constraint-card {
+  background: white;
+  border: 2px solid #e0e0e0;
+  border-right: 4px solid #667eea;
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+.emp-constraint-card h4 { margin-bottom: 10px; color: #333; }
+
+/* ---- Setup Steps ---- */
+.setup-steps {
+  display: flex;
+  justify-content: center;
+  gap: 0;
+  margin-bottom: 30px;
+  overflow-x: auto;
+}
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 70px;
+  position: relative;
+}
+.step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 18px;
+  left: -50%;
+  width: 100%;
+  height: 3px;
+  background: #e0e0e0;
+  z-index: 0;
+}
+.step.done::after  { background: #667eea; }
+.step-num {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #e0e0e0;
+  color: #999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 15px;
+  position: relative;
+  z-index: 1;
+  transition: all 0.3s;
+}
+.step.active .step-num { background: #667eea; color: white; }
+.step.done .step-num   { background: #28a745; color: white; }
+.step-label { font-size: 11px; color: #888; margin-top: 5px; text-align: center; }
+.step.active .step-label { color: #667eea; font-weight: bold; }
+.step.done .step-label   { color: #28a745; }
+
+/* ---- List Items (for dept/emp/shift lists) ---- */
+.list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8f9ff;
+  border: 1px solid #e8ecff;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+}
+.list-item .item-name { font-weight: bold; color: #333; }
+.list-item .item-meta { font-size: 13px; color: #888; margin-top: 2px; }
+.list-item .item-actions { display: flex; gap: 6px; }
+
+/* ---- Status ---- */
+.status-active   { color: #28a745; font-weight: bold; }
+.status-inactive { color: #dc3545; font-weight: bold; }
+
+/* ---- Divider ---- */
+.divider {
+  border: none;
+  border-top: 2px solid #f0f0f0;
+  margin: 24px 0;
+}
+
+/* ---- Logo/Header ---- */
+.app-logo {
+  text-align: center;
+  margin-bottom: 30px;
+}
+.app-logo .logo-icon {
+  font-size: 50px;
+  display: block;
+  margin-bottom: 8px;
+}
+.app-logo h1 { margin-bottom: 4px; }
+.app-logo .tagline { color: #888; font-size: 15px; }
+
+/* ---- Nav Tabs ---- */
+.nav-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 3px solid #e0e0e0;
+  margin-bottom: 24px;
+  overflow-x: auto;
+}
+.nav-tab {
+  padding: 12px 20px;
+  cursor: pointer;
+  font-weight: bold;
+  color: #888;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -3px;
+  white-space: nowrap;
+  transition: all 0.2s;
+  font-size: 15px;
+}
+.nav-tab:hover { color: #667eea; }
+.nav-tab.active { color: #667eea; border-bottom-color: #667eea; }
+
+/* ---- Tab Panels ---- */
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ---- Constraint Day grid ---- */
+.days-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.day-col { text-align: center; }
+.day-label { font-size: 12px; font-weight: bold; color: #666; margin-bottom: 4px; }
+
+/* ---- Responsive ---- */
+@media (max-width: 600px) {
+  body { padding: 10px; }
+  .container { padding: 16px; border-radius: 14px; }
+  h1 { font-size: 1.7em; }
+  .mode-btn { font-size: 18px; padding: 20px 24px; }
+  .schedule-table { font-size: 12px; }
+  .schedule-table th, .schedule-table td { padding: 8px 4px; min-width: 60px; }
+  .nav-tab { padding: 10px 12px; font-size: 13px; }
+}

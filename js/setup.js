@@ -1,0 +1,385 @@
+// ===========================================
+// setup.js — אשף הגדרת סניף
+// ===========================================
+
+// Local state (saved to Firebase on each step)
+const setupData = {
+  step1: {},
+  shiftTypes: {},       // { key: {name, start, end} }
+  departments: {},      // { key: {name, min, max} }
+  employees: {},        // { key: {displayName, password, dept, role} }
+  constraintTypes: {}   // { key: {label, value, category, scope} }
+};
+
+let branchKey = null;
+
+// ===========================================
+// INIT — wait for auth
+// ===========================================
+auth.onAuthStateChanged(async (user) => {
+  if (!user) {
+    window.location.href = 'index.html';
+    return;
+  }
+  await loadBranch(user.uid);
+  branchKey = user.uid;
+
+
+  // Load branch code display (friendly numeric code)
+const codeSnap = await db.ref(`branches/${user.uid}/branchCode`).once('value');
+const branchCode = codeSnap.val();
+
+document.getElementById('s1-branch-code').value = branchCode || '';
+
+
+  // Load existing data (if coming back to setup)
+  await loadExistingData();
+  renderAll();
+});
+
+async function loadExistingData() {
+  try {
+    const snap = await db.ref(`branches/${branchKey}/org`).once('value');
+    const org = snap.val() || {};
+    if (org.shiftTypes)      Object.assign(setupData.shiftTypes,      org.shiftTypes);
+    if (org.departments)     Object.assign(setupData.departments,     org.departments);
+    if (org.employees)       Object.assign(setupData.employees,       org.employees);
+    if (org.constraintTypes) Object.assign(setupData.constraintTypes, org.constraintTypes);
+
+    const nameSnap = await db.ref(`branches/${branchKey}/displayName`).once('value');
+    if (nameSnap.val()) {
+      document.getElementById('s1-name').value = nameSnap.val();
+    }
+  } catch (e) { console.warn('loadExistingData:', e); }
+}
+
+// ===========================================
+// NAVIGATION
+// ===========================================
+let currentStep = 1;
+
+function showMsg(elId, text, type = 'info') {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'message ' + type;
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 4000);
+}
+
+function goStep(n) {
+  document.getElementById(`step-${currentStep}`).classList.remove('active');
+  document.getElementById(`step-ind-${currentStep}`).classList.remove('active');
+  document.getElementById(`step-ind-${currentStep}`).classList.add('done');
+
+  currentStep = n;
+  document.getElementById(`step-${currentStep}`).classList.add('active');
+  document.getElementById(`step-ind-${currentStep}`).classList.add('active');
+  document.getElementById(`step-ind-${currentStep}`).classList.remove('done');
+
+  renderAll();
+  window.scrollTo(0, 0);
+}
+
+function renderAll() {
+  renderShiftTypes();
+  renderDepts();
+  renderEmployees();
+  renderConstraintTypes();
+  updateDeptSelect();
+}
+
+// ===========================================
+// STEP 1 — Business Info
+// ===========================================
+async function saveStep1() {
+  const name     = document.getElementById('s1-name').value.trim();
+  const workDays = document.getElementById('s1-work-days').value;
+  const lang     = document.getElementById('s1-lang').value;
+
+  if (!name) return showMsg('s1-msg', 'אנא הזן שם עסק', 'error');
+
+  await db.ref(`branches/${branchKey}/displayName`).set(name);
+  await db.ref(`branches/${branchKey}/settings`).update({ workDays: parseInt(workDays), lang });
+
+  goStep(2);
+}
+
+// ===========================================
+// STEP 2 — Shift Types
+// ===========================================
+function addShiftType() {
+  const name  = document.getElementById('new-shift-name').value.trim();
+  const start = document.getElementById('new-shift-start').value;
+  const end   = document.getElementById('new-shift-end').value;
+
+  if (!name) return showMsg('s2-msg', 'הזן שם משמרת', 'error');
+
+  const key = 'shift_' + Date.now();
+  setupData.shiftTypes[key] = { name, start, end };
+  renderShiftTypes();
+
+  document.getElementById('new-shift-name').value = '';
+}
+
+function removeShiftType(key) {
+  delete setupData.shiftTypes[key];
+  renderShiftTypes();
+}
+
+function renderShiftTypes() {
+  const el = document.getElementById('shift-types-list');
+  if (!el) return;
+  const entries = Object.entries(setupData.shiftTypes);
+  if (entries.length === 0) {
+    el.innerHTML = '<p style="color:#aaa; text-align:center; padding:10px;">אין משמרות עדיין</p>';
+    return;
+  }
+  el.innerHTML = entries.map(([key, s], i) => `
+    <div class="list-item">
+      <div>
+        <div class="item-name"><span class="shift-chip shift-color-${i % 6}">${s.name}</span></div>
+        <div class="item-meta">${s.start} — ${s.end}</div>
+      </div>
+      <div class="item-actions">
+        <button class="btn sm danger" onclick="removeShiftType('${key}')">🗑️</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function saveStep2() {
+  if (Object.keys(setupData.shiftTypes).length === 0)
+    return showMsg('s2-msg', 'הוסף לפחות סוג משמרת אחד', 'error');
+
+  await db.ref(`branches/${branchKey}/org/shiftTypes`).set(setupData.shiftTypes);
+  goStep(3);
+}
+
+// ===========================================
+// STEP 3 — Departments
+// ===========================================
+function addDept() {
+  const name = document.getElementById('new-dept-name').value.trim();
+  const min  = parseInt(document.getElementById('new-dept-min').value) || 0;
+  const max  = parseInt(document.getElementById('new-dept-max').value) || 0;
+
+  if (!name) return showMsg('s3-msg', 'הזן שם מחלקה', 'error');
+
+  const key = 'dept_' + Date.now();
+  setupData.departments[key] = { name, min, max, employees: {} };
+  renderDepts();
+  updateDeptSelect();
+
+  document.getElementById('new-dept-name').value = '';
+}
+
+function removeDept(key) {
+  delete setupData.departments[key];
+  renderDepts();
+  updateDeptSelect();
+}
+
+function renderDepts() {
+  const el = document.getElementById('dept-list');
+  if (!el) return;
+  const entries = Object.entries(setupData.departments);
+  if (entries.length === 0) {
+    el.innerHTML = '<p style="color:#aaa; text-align:center; padding:10px;">אין מחלקות עדיין</p>';
+    return;
+  }
+  el.innerHTML = entries.map(([key, d]) => `
+    <div class="list-item">
+      <div>
+        <div class="item-name">🏬 ${d.name}</div>
+        <div class="item-meta">מינימום: ${d.min} | מקסימום: ${d.max || 'ללא הגבלה'}</div>
+      </div>
+      <div class="item-actions">
+        <button class="btn sm danger" onclick="removeDept('${key}')">🗑️</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function saveStep3() {
+  if (Object.keys(setupData.departments).length === 0)
+    return showMsg('s3-msg', 'הוסף לפחות מחלקה אחת', 'error');
+
+  await db.ref(`branches/${branchKey}/org/departments`).set(setupData.departments);
+  goStep(4);
+}
+
+// ===========================================
+// STEP 4 — Employees
+// ===========================================
+function updateDeptSelect() {
+  const sel = document.getElementById('new-emp-dept');
+  if (!sel) return;
+  const entries = Object.entries(setupData.departments);
+  sel.innerHTML = '<option value="">-- בחר מחלקה --</option>' +
+    entries.map(([key, d]) => `<option value="${key}">${d.name}</option>`).join('');
+}
+
+function addEmployee() {
+  const display = document.getElementById('new-emp-display').value.trim();
+  const user    = document.getElementById('new-emp-user').value.trim().toUpperCase();
+  const pass    = document.getElementById('new-emp-pass').value.trim();
+  const dept    = document.getElementById('new-emp-dept').value;
+  const role    = document.getElementById('new-emp-role').value.trim();
+
+  if (!display || !user || !pass) return showMsg('s4-msg', 'שם תצוגה, שם משתמש וסיסמה הם שדות חובה', 'error');
+  if (setupData.employees[user])   return showMsg('s4-msg', 'שם המשתמש כבר קיים', 'error');
+
+  setupData.employees[user] = { displayName: display, password: pass, dept, role };
+
+  // Add to department's employee list
+  if (dept && setupData.departments[dept]) {
+    if (!setupData.departments[dept].employees) setupData.departments[dept].employees = {};
+    setupData.departments[dept].employees[user] = true;
+  }
+
+  renderEmployees();
+
+  document.getElementById('new-emp-display').value = '';
+  document.getElementById('new-emp-user').value    = '';
+  document.getElementById('new-emp-pass').value    = '';
+  document.getElementById('new-emp-role').value    = '';
+}
+
+function removeEmployee(key) {
+  // Remove from dept
+  const dept = setupData.employees[key]?.dept;
+  if (dept && setupData.departments[dept]?.employees) {
+    delete setupData.departments[dept].employees[key];
+  }
+  delete setupData.employees[key];
+  renderEmployees();
+}
+
+function renderEmployees() {
+  const el = document.getElementById('emp-list');
+  if (!el) return;
+  const entries = Object.entries(setupData.employees);
+  if (entries.length === 0) {
+    el.innerHTML = '<p style="color:#aaa; text-align:center; padding:10px;">אין עובדים עדיין</p>';
+    return;
+  }
+  el.innerHTML = entries.map(([key, e]) => {
+    const deptName = e.dept && setupData.departments[e.dept] ? setupData.departments[e.dept].name : '—';
+    return `
+      <div class="list-item">
+        <div>
+          <div class="item-name">👤 ${e.displayName} <small style="color:#999">(${key})</small></div>
+          <div class="item-meta">מחלקה: ${deptName}${e.role ? ' | ' + e.role : ''}</div>
+        </div>
+        <div class="item-actions">
+          <button class="btn sm danger" onclick="removeEmployee('${key}')">🗑️</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function saveStep4() {
+  if (Object.keys(setupData.employees).length === 0)
+    return showMsg('s4-msg', 'הוסף לפחות עובד אחד', 'error');
+
+  await db.ref(`branches/${branchKey}/org/employees`).set(setupData.employees);
+  await db.ref(`branches/${branchKey}/org/departments`).set(setupData.departments);
+  goStep(5);
+}
+
+// ===========================================
+// STEP 5 — Constraint Types
+// ===========================================
+// Defaults to pre-populate
+const DEFAULT_CONSTRAINT_TYPES = {
+  'no-morning':  { label: '❌ לא בוקר',    value: 'no-morning',  category: 'preference', scope: 'all' },
+  'no-evening':  { label: '❌ לא ערב',     value: 'no-evening',  category: 'preference', scope: 'all' },
+  'day-off':     { label: '🏖️ חופש מלא',  value: 'day-off',     category: 'absence',    scope: 'all' },
+  'want-morning':{ label: '✅ רוצה בוקר',  value: 'want-morning',category: 'preference', scope: 'all' },
+  'want-evening':{ label: '✅ רוצה ערב',   value: 'want-evening',category: 'preference', scope: 'all' },
+};
+
+function loadDefaultConstraints() {
+  // Only load defaults if nothing defined yet
+  if (Object.keys(setupData.constraintTypes).length === 0) {
+    Object.assign(setupData.constraintTypes, DEFAULT_CONSTRAINT_TYPES);
+    renderConstraintTypes();
+    showMsg('s5-msg', '✅ הוספנו אילוצים בסיסיים — תוכל לערוך או להוסיף', 'info');
+  }
+}
+
+function addConstraintType() {
+  const label    = document.getElementById('new-ct-label').value.trim();
+  const value    = document.getElementById('new-ct-value').value.trim();
+  const category = document.getElementById('new-ct-category').value;
+  const scope    = document.getElementById('new-ct-scope').value;
+
+  if (!label || !value) return showMsg('s5-msg', 'תווית וערך הם שדות חובה', 'error');
+  if (setupData.constraintTypes[value]) return showMsg('s5-msg', 'ערך זה כבר קיים', 'error');
+
+  setupData.constraintTypes[value] = { label, value, category, scope };
+  renderConstraintTypes();
+
+  document.getElementById('new-ct-label').value = '';
+  document.getElementById('new-ct-value').value = '';
+}
+
+function removeConstraintType(key) {
+  delete setupData.constraintTypes[key];
+  renderConstraintTypes();
+}
+
+function renderConstraintTypes() {
+  const el = document.getElementById('constraint-types-list');
+  if (!el) return;
+  const entries = Object.entries(setupData.constraintTypes);
+  if (entries.length === 0) {
+    el.innerHTML = `
+      <p style="color:#aaa; text-align:center; padding:10px;">אין אילוצים מוגדרים</p>
+      <button class="btn secondary sm" onclick="loadDefaultConstraints()" style="display:block; margin:10px auto; width:auto">📋 טען אילוצים בסיסיים</button>
+    `;
+    return;
+  }
+
+  const catNames = { preference: 'העדפה', absence: 'היעדרות', custom: 'אחר' };
+  el.innerHTML = entries.map(([key, ct]) => `
+    <div class="list-item">
+      <div>
+        <div class="item-name">${ct.label}</div>
+        <div class="item-meta">${catNames[ct.category] || ct.category} | ${ct.scope === 'all' ? 'כל העובדים' : 'מחלקה ספציפית'} | קוד: <code>${ct.value}</code></div>
+      </div>
+      <div class="item-actions">
+        <button class="btn sm danger" onclick="removeConstraintType('${key}')">🗑️</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function finishSetup() {
+  if (Object.keys(setupData.constraintTypes).length === 0)
+    return showMsg('s5-msg', 'הוסף לפחות סוג אילוץ אחד (או לחץ "טען אילוצים בסיסיים")', 'error');
+
+  showMsg('s5-msg', '⏳ שומר...', 'info');
+
+  try {
+    await db.ref(`branches/${branchKey}/org/constraintTypes`).set(setupData.constraintTypes);
+    await db.ref(`branches/${branchKey}/setupComplete`).set(true);
+    await db.ref(`branches/${branchKey}/setupCompletedAt`).set(Date.now());
+
+    showMsg('s5-msg', '✅ הגדרה הושלמה! עובר לניהול...', 'success');
+    setTimeout(() => { window.location.href = 'manager.html'; }, 1500);
+  } catch (e) {
+    showMsg('s5-msg', '❌ שגיאה: ' + e.message, 'error');
+  }
+}
+
+// Init defaults check on load
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    if (currentStep === 5 && Object.keys(setupData.constraintTypes).length === 0) {
+      loadDefaultConstraints();
+    }
+  }, 500);
+});

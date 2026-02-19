@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShiftSaaS — מערכת ניהול סידור עבודה</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.json">
+</head>
+<body>
+<div class="container">
+
+  <!-- ===== LANDING ===== -->
+  <div id="screen-landing" class="section active">
+    <div class="app-logo">
+      <span class="logo-icon">📅</span>
+      <h1>ShiftSaaS</h1>
+      <p class="tagline">ניהול סידור עבודה חכם לכל עסק</p>
+    </div>
+
+    <button class="mode-btn" onclick="showScreen('screen-manager-login')">
+      <span class="icon">🏢</span>
+      כניסת מנהל
+    </button>
+    <button class="mode-btn" onclick="showScreen('screen-employee-login')">
+      <span class="icon">👤</span>
+      כניסת עובד
+    </button>
+    <button class="mode-btn secondary" onclick="showScreen('screen-register')">
+      <span class="icon">✨</span>
+      הרשמה — עסק חדש
+    </button>
+  </div>
+
+  <!-- ===== REGISTER ===== -->
+  <div id="screen-register" class="section">
+    <h2>🆕 הרשמת עסק חדש</h2>
+    <p style="color:#888; margin-bottom:20px;">ניסיון חינם 14 יום — ללא צורך בכרטיס אשראי</p>
+
+    <div class="form-group">
+      <label>שם העסק / הסניף</label>
+      <input type="text" id="reg-business-name" placeholder="לדוג׳: קפה עלמה, סניף תל אביב">
+    </div>
+    <div class="form-group">
+      <label>כתובת אימייל</label>
+      <input type="email" id="reg-email" placeholder="manager@example.com">
+    </div>
+    <div class="form-group">
+      <label>סיסמה</label>
+      <input type="password" id="reg-password" placeholder="לפחות 6 תווים">
+    </div>
+    <div class="form-group">
+      <label>אימות סיסמה</label>
+      <input type="password" id="reg-password2" placeholder="חזור על הסיסמה">
+    </div>
+
+    <button class="btn" onclick="doRegister()">✅ צור חשבון והתחל</button>
+    <button class="btn secondary" onclick="showScreen('screen-landing')">← חזרה</button>
+    <div id="reg-msg" class="message" style="display:none"></div>
+  </div>
+
+  <!-- ===== MANAGER LOGIN ===== -->
+  <div id="screen-manager-login" class="section">
+    <h2>🏢 כניסת מנהל</h2>
+    <div class="form-group">
+      <label>אימייל</label>
+      <input type="email" id="mgr-email" placeholder="manager@example.com">
+    </div>
+    <div class="form-group">
+      <label>סיסמה</label>
+      <input type="password" id="mgr-password" placeholder="סיסמה">
+    </div>
+    <button class="btn" onclick="doManagerLogin()">🔑 כניסה</button>
+    <button class="btn secondary" onclick="showScreen('screen-landing')">← חזרה</button>
+    <div id="mgr-login-msg" class="message" style="display:none"></div>
+  </div>
+
+  <!-- ===== EMPLOYEE LOGIN ===== -->
+  <div id="screen-employee-login" class="section">
+    <h2>👤 כניסת עובד</h2>
+    <div class="form-group">
+      <label>קוד סניף</label>
+      <input type="text" id="emp-branch-code" placeholder="קבל מהמנהל שלך" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
+    </div>
+    <div class="form-group">
+      <label>שם משתמש</label>
+      <input type="text" id="emp-username" placeholder="שם משתמש" oninput="this.value=this.value.toUpperCase()">
+    </div>
+    <div class="form-group">
+      <label>סיסמה</label>
+      <input type="password" id="emp-password" placeholder="סיסמה">
+    </div>
+    <button class="btn" onclick="doEmployeeLogin()">🔑 כניסה</button>
+    <button class="btn secondary" onclick="showScreen('screen-landing')">← חזרה</button>
+    <div id="emp-login-msg" class="message" style="display:none"></div>
+  </div>
+
+</div><!-- /container -->
+
+<!-- Firebase (compat) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="js/firebase.js"></script>
+<script>
+// ===========================================
+// Navigation
+// ===========================================
+function showScreen(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function showMsg(elId, text, type = 'info') {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'message ' + type;
+  el.style.display = 'block';
+}
+
+async function reserveBranchCode(uid) {
+  // 6 ספרות (אפשר לשנות בעתיד). מנסה כמה פעמים עד שמוצא קוד פנוי.
+  for (let i = 0; i < 25; i++) {
+    const code = String(Math.floor(100000 + Math.random() * 900000)); // 100000-999999
+
+    const ref = db.ref(`branchCodes/${code}`);
+    const result = await ref.transaction(current => {
+      if (current === null) return uid;   // תופס את הקוד עבור uid
+      return;                             // כבר תפוס -> מבטל
+    });
+
+    if (result.committed) return code;
+  }
+  throw new Error('לא הצלחתי לייצר קוד סניף פנוי. נסה שוב.');
+}
+
+
+
+// ===========================================
+// Register
+// ===========================================
+async function doRegister() {
+  const name  = document.getElementById('reg-business-name').value.trim();
+  const email = document.getElementById('reg-email').value.trim();
+  const pass  = document.getElementById('reg-password').value;
+  const pass2 = document.getElementById('reg-password2').value;
+
+  if (!name || !email || !pass) return showMsg('reg-msg', 'אנא מלא את כל השדות', 'error');
+  if (pass !== pass2)           return showMsg('reg-msg', 'הסיסמאות אינן תואמות', 'error');
+  if (pass.length < 6)          return showMsg('reg-msg', 'הסיסמה חייבת לפחות 6 תווים', 'error');
+
+  showMsg('reg-msg', '⏳ יוצר חשבון...', 'info');
+
+  try {
+    const cred = await auth.createUserWithEmailAndPassword(email, pass);
+    const uid  = cred.user.uid;
+
+    // Create branch skeleton
+    await loadBranch(uid);
+
+    const branchCode = await reserveBranchCode(uid);
+    await db.ref(`branches/${uid}/branchCode`).set(branchCode);
+    await db.ref(`branchCodes/${branchCode}`).set(uid);
+ 
+
+    // Save business name
+    await db.ref(`branches/${uid}/displayName`).set(name);
+    await db.ref(`branches/${uid}/ownerEmail`).set(email);
+
+    showMsg('reg-msg', '✅ החשבון נוצר! מעביר לאשף ההגדרה...', 'success');
+    setTimeout(() => { window.location.href = 'setup.html'; }, 1500);
+
+  } catch (e) {
+    const msg = {
+      'auth/email-already-in-use': 'כתובת האימייל כבר רשומה במערכת',
+      'auth/invalid-email':        'כתובת אימייל לא תקינה',
+      'auth/weak-password':        'הסיסמה חלשה מדי'
+    }[e.code] || e.message;
+    showMsg('reg-msg', '❌ ' + msg, 'error');
+  }
+}
+
+// ===========================================
+// Manager Login
+// ===========================================
+async function doManagerLogin() {
+  const email = document.getElementById('mgr-email').value.trim();
+  const pass  = document.getElementById('mgr-password').value;
+
+  if (!email || !pass) return showMsg('mgr-login-msg', 'אנא הזן אימייל וסיסמה', 'error');
+
+  showMsg('mgr-login-msg', '⏳ מתחבר...', 'info');
+
+  try {
+    const cred = await auth.signInWithEmailAndPassword(email, pass);
+    const uid  = cred.user.uid;
+    await loadBranch(uid);
+
+    // Check if setup was completed
+    const snap = await db.ref(`branches/${uid}/setupComplete`).once('value');
+    if (snap.val()) {
+      window.location.href = 'manager.html';
+    } else {
+      window.location.href = 'setup.html';
+    }
+  } catch (e) {
+    const msg = {
+      'auth/user-not-found':  'אימייל לא קיים במערכת',
+      'auth/wrong-password':  'סיסמה שגויה',
+      'auth/invalid-email':   'כתובת אימייל לא תקינה'
+    }[e.code] || e.message;
+    showMsg('mgr-login-msg', '❌ ' + msg, 'error');
+  }
+}
+
+// ===========================================
+// Employee Login
+// ===========================================
+async function doEmployeeLogin() {
+  const branchCode = document.getElementById('emp-branch-code').value.trim().toUpperCase();
+  const username   = document.getElementById('emp-username').value.trim().toUpperCase();
+  const password   = document.getElementById('emp-password').value.trim();
+
+  if (!branchCode || !username || !password)
+    return showMsg('emp-login-msg', 'אנא מלא את כל השדות', 'error');
+
+  showMsg('emp-login-msg', '⏳ מתחבר...', 'info');
+
+  try {
+    // Translate branchCode -> branchKey (manager uid)
+    const mapSnap = await db.ref(`branchCodes/${branchCode}`).once('value');
+    const branchKey = mapSnap.val();
+    if (!branchKey) return showMsg('emp-login-msg', '❌ קוד סניף שגוי', 'error');
+
+    // Validate employee credentials
+    const empSnap = await db.ref(`branches/${branchKey}/org/employees/${username}`).once('value');
+    const empData = empSnap.val();
+
+    if (!empData) return showMsg('emp-login-msg', '❌ שם משתמש לא קיים', 'error');
+
+    const storedPass = typeof empData === 'string' ? empData : empData.password;
+    if (storedPass !== password) return showMsg('emp-login-msg', '❌ סיסמה שגויה', 'error');
+
+    // Save session
+    localStorage.setItem('empBranchKey', branchKey);   // uid פנימי
+    localStorage.setItem('empBranchCode', branchCode); // לתצוגה בלבד
+    localStorage.setItem('empUsername',  username);
+    localStorage.setItem('empDisplayName', empData.displayName || username);
+
+    window.location.href = 'employee.html';
+
+  } catch (e) {
+    showMsg('emp-login-msg', '❌ שגיאה: ' + e.message, 'error');
+  }
+}
+
+</script>
+</body>
+</html>
