@@ -101,8 +101,11 @@ function generateSchedule(orgData, constraints, settings) {
       const emps = deptEmployees[deptKey] || [];
       if (emps.length === 0) continue;
 
-      const deptMin = parseInt(dept.min) || 0;
-      const deptMax = parseInt(dept.max) || emps.length;
+      const minRaw = parseInt(dept.min);
+      const maxRaw = parseInt(dept.max);
+
+      const deptMin = Number.isFinite(minRaw) && minRaw > 0 ? minRaw : 0;
+      const deptMax = Number.isFinite(maxRaw) && maxRaw > 0 ? maxRaw : emps.length;
 
       // Sort employees: prefer those with fewer shifts assigned (fairness)
       const sorted = [...emps].sort((a, b) => empShiftCount[a] - empShiftCount[b]);
