@@ -101,6 +101,7 @@ function generateSchedule(orgData, constraints, settings) {
       const emps = deptEmployees[deptKey] || [];
       if (emps.length === 0) continue;
 
+      
       const minRaw = parseInt(dept.min);
       const maxRaw = parseInt(dept.max);
 
