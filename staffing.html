@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>דרישות שיבוץ — ShiftSaaS</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container">
+  <div class="app-logo">
+    <span class="logo-icon">📊</span>
+    <h1>דרישות שיבוץ</h1>
+    <p class="tagline">הגדר כמה עובדים צריך בכל משמרת, לכל מחלקה — קבוע לפי יום בשבוע</p>
+  </div>
+
+  <div class="card" style="margin-top:14px;">
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn sm secondary" id="tab-weekday" onclick="setRuleScope('weekday')">א׳–ה׳</button>
+        <button class="btn sm secondary" id="tab-friday" onclick="setRuleScope('friday')">שישי</button>
+        <button class="btn sm secondary" id="tab-saturday" onclick="setRuleScope('saturday')">שבת</button>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn sm secondary" onclick="window.location.href='manager.html'">← חזרה למנהל</button>
+        <button class="btn sm" onclick="saveStaffingRules()">💾 שמור</button>
+      </div>
+    </div>
+
+    <div id="staffing-msg" class="message" style="display:none; margin-top:12px;"></div>
+
+    <div style="margin-top:14px; overflow:auto;">
+      <table class="table" id="staffing-table" style="min-width:720px;">
+        <thead id="staffing-thead"></thead>
+        <tbody id="staffing-tbody"></tbody>
+      </table>
+    </div>
+
+    <p style="color:#777; margin-top:12px; font-size:13px; line-height:1.4;">
+      הערות:
+      <br>• ערך 0 פירושו "לא פעיל" (לא נדרשים עובדים במשמרת הזו למחלקה הזו).
+      <br>• המערכת תשתמש בדרישות האלו בכל יצירת סידור עד שתשנה אותן.
+    </p>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="js/firebase.js"></script>
+<script src="js/staffing.js"></script>
+</body>
+</html>

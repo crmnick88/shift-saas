@@ -91,67 +91,130 @@ function generateSchedule(orgData, constraints, settings) {
   }
 
   // =============================================
-  // MAIN SCHEDULING LOOP
+  // MAIN SCHEDULING LOOP (per-department staffing rules)
   // =============================================
+  const staffingRules = settings.staffingRules || {};
+  const weekKey = settings.weekKey || null;
+
+  function getScopeForDayIndex(dayIndex) {
+    // If weekKey provided: decide by actual weekday (Sun..Sat)
+    if (weekKey) {
+      const base = new Date(weekKey);
+      if (!isNaN(base.getTime())) {
+        const dt = new Date(base);
+        dt.setDate(dt.getDate() + dayIndex);
+        const dow = dt.getDay(); // 0=Sun ... 5=Fri ... 6=Sat
+        if (dow === 5) return 'friday';
+        if (dow === 6) return 'saturday';
+        return 'weekday'; // Sun-Thu
+      }
+    }
+    // Fallback (no dates): treat last 2 days as Fri/Sat when workDays>=6/7
+    if (workDays >= 7) return (dayIndex === 5 ? 'friday' : dayIndex === 6 ? 'saturday' : 'weekday');
+    if (workDays === 6) return (dayIndex === 4 ? 'friday' : 'weekday');
+    return 'weekday';
+  }
+
+  function autoDeptRequirements(empCount) {
+    // Default behavior if manager didn't define staffing rules yet.
+    // 1 employee  => first shift
+    // 2 employees => first + last
+    // 3+         => first + middle + last (if exists) otherwise first + last
+    const req = {};
+    if (empCount <= 0) return req;
+    if (empCount === 1) {
+      req[shiftKeys[0]] = 1;
+      return req;
+    }
+    if (empCount === 2) {
+      req[shiftKeys[0]] = 1;
+      req[shiftKeys[shiftKeys.length - 1]] = 1;
+      return req;
+    }
+    // 3+
+    req[shiftKeys[0]] = 1;
+    if (shiftKeys.length >= 3) {
+      // "middle" = the second shift in order (manager controls ordering)
+      req[shiftKeys[1]] = 1;
+    }
+    req[shiftKeys[shiftKeys.length - 1]] = 1;
+    return req;
+  }
+
   for (let d = 0; d < workDays; d++) {
     const dayKey = `day_${d}`;
+    const scope = getScopeForDayIndex(d);
+    const scopeRules = staffingRules[scope] || {};
 
     // Process department by department
     for (const [deptKey, dept] of Object.entries(departments)) {
       const emps = deptEmployees[deptKey] || [];
       if (emps.length === 0) continue;
 
-      
-      const minRaw = parseInt(dept.min);
-      const maxRaw = parseInt(dept.max);
+      // Required slots per shift for this department
+      const deptRule = scopeRules[deptKey] || {};
+      let required = {};
+      if (deptRule && Object.keys(deptRule).length > 0) {
+        // keep only valid shift keys
+        for (const [shiftKey, val] of Object.entries(deptRule)) {
+          const n = parseInt(val);
+          if (shiftTypes[shiftKey] && Number.isFinite(n) && n > 0) required[shiftKey] = n;
+        }
+      } else {
+        required = autoDeptRequirements(emps.length);
+      }
 
-      const deptMin = Number.isFinite(minRaw) && minRaw > 0 ? minRaw : 0;
-      const deptMax = Number.isFinite(maxRaw) && maxRaw > 0 ? maxRaw : emps.length;
+      // If no requirements, everyone off for the day
+      if (Object.keys(required).length === 0) {
+        for (const empKey of emps) result[dayKey][empKey] = null;
+        continue;
+      }
 
       // Sort employees: prefer those with fewer shifts assigned (fairness)
       const sorted = [...emps].sort((a, b) => empShiftCount[a] - empShiftCount[b]);
+      const unassigned = new Set(sorted);
 
-      // First pass: assign "want" preferences
-      for (const empKey of sorted) {
-        for (const shiftKey of shiftKeys) {
+      // Assign per shiftKey required count:
+      for (const shiftKey of Object.keys(required)) {
+        let need = required[shiftKey];
+
+        // Pass 1: wants
+        for (const empKey of sorted) {
+          if (need <= 0) break;
+          if (!unassigned.has(empKey)) continue;
           if (wantsShift(empKey, dayKey, shiftKey) && !isBlocked(empKey, dayKey, shiftKey)) {
             result[dayKey][empKey] = shiftKey;
             empShiftCount[empKey]++;
-            break;
+            unassigned.delete(empKey);
+            need--;
           }
         }
-      }
 
-      // Second pass: fill remaining employees to meet minimum
-      let assignedInDept = sorted.filter(e => result[dayKey][e]).length;
-
-      for (const empKey of sorted) {
-        if (result[dayKey][empKey]) continue; // already assigned
-        if (assignedInDept >= deptMax) break;
-
-        // Find first non-blocked shift
-        let assigned = false;
-        for (const shiftKey of shiftKeys) {
+        // Pass 2: any available
+        for (const empKey of sorted) {
+          if (need <= 0) break;
+          if (!unassigned.has(empKey)) continue;
           if (!isBlocked(empKey, dayKey, shiftKey)) {
             result[dayKey][empKey] = shiftKey;
             empShiftCount[empKey]++;
-            assignedInDept++;
-            assigned = true;
-            break;
+            unassigned.delete(empKey);
+            need--;
           }
-        }
-
-        // If all shifts blocked → day off
-        if (!assigned) {
-          result[dayKey][empKey] = null; // day off
         }
       }
 
-      // Mark rest as day off
+      // Any remaining employees in department are day off / not scheduled
       for (const empKey of sorted) {
         if (result[dayKey][empKey] === undefined) {
           result[dayKey][empKey] = null;
         }
+      }
+    }
+
+    // Also mark employees not in any dept (optional): day off
+    for (const empKey of Object.keys(employees)) {
+      if (empDept[empKey] === null && result[dayKey][empKey] === undefined) {
+        result[dayKey][empKey] = null;
       }
     }
   }

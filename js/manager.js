@@ -127,6 +127,9 @@ async function loadExistingSchedule() {
 async function generateSchedule() {
   const weekKey    = getWeekKey(currentWeekOffset);
   const settings   = (await db.ref(`branches/${mgrBranchKey}/settings`).once('value')).val() || {};
+  const staffingRules = (await db.ref(`branches/${mgrBranchKey}/staffingRules`).once('value')).val() || {};
+  settings.staffingRules = staffingRules;
+  settings.weekKey = weekKey;
 
   // Load constraints for this week
   const cSnap      = await db.ref(`branches/${mgrBranchKey}/constraints/${weekKey}`).once('value');
