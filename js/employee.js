@@ -3,7 +3,7 @@
 // ===========================================
 
 // ⚠️ הכנס את ה-VAPID Key מ: Firebase Console → Project Settings → Cloud Messaging → Web Push certificates
-const VAPID_KEY = 'VAPID_KEY_FROM_FIREBASE_CONSOLE';
+const VAPID_KEY = 'BJq9fzPsJS1arouycz-bju92Wm_M2yEOL9WFBCSIJ2BLVhfKZCWmiFBhQheH5lVcdkp0_-MwAaW0mFLBWzZ-ECk';
 
 let empBranchKey = localStorage.getItem('empBranchKey');
 let empUsername  = localStorage.getItem('empUsername');
