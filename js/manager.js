@@ -303,6 +303,81 @@ async function loadConstraints() {
   container.innerHTML = html || '<p style="color:#aaa; text-align:center;">אין אילוצים לשבוע זה</p>';
 }
 
+// ===========================================
+// MANAGER MANUAL CONSTRAINT ENTRY
+// ===========================================
+function toggleMgrConstraintForm() {
+  const form = document.getElementById('mgr-constraint-form');
+  const isHidden = form.style.display === 'none';
+  form.style.display = isHidden ? 'block' : 'none';
+  if (isHidden) populateMgrConstraintForm();
+}
+
+function populateMgrConstraintForm() {
+  const employees  = orgData.employees  || {};
+  const shiftTypes = orgData.shiftTypes || {};
+  const ctypes     = orgData.constraintTypes || {};
+  const workDays   = parseInt(mgrSettings.workDays) || 6;
+  const dayNames   = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+
+  // Employees
+  const empSel = document.getElementById('mc-emp');
+  empSel.innerHTML = Object.entries(employees)
+    .map(([k, e]) => `<option value="${k}">${e.displayName || k}</option>`)
+    .join('');
+
+  // Days
+  const daySel = document.getElementById('mc-day');
+  daySel.innerHTML = Array.from({ length: workDays }, (_, i) =>
+    `<option value="day_${i}">יום ${dayNames[i]}</option>`
+  ).join('');
+
+  // Constraint options: shifts + absences
+  const valSel = document.getElementById('mc-value');
+  const shiftOpts = Object.entries(shiftTypes)
+    .map(([k, s]) => `<option value="shift:${k}">⭐ משמרת מועדפת: ${s.name}</option>`)
+    .join('');
+  const absOpts = Object.entries(ctypes)
+    .map(([k, ct]) => `<option value="absence:${k}">${ct.label || k}</option>`)
+    .join('');
+  valSel.innerHTML =
+    '<option value="">-- בחר אילוץ --</option>' +
+    (shiftOpts ? `<optgroup label="משמרת מועדפת">${shiftOpts}</optgroup>` : '') +
+    (absOpts   ? `<optgroup label="היעדרות">${absOpts}</optgroup>` : '');
+}
+
+async function saveMgrConstraint() {
+  const empKey = document.getElementById('mc-emp').value;
+  const dayKey = document.getElementById('mc-day').value;
+  const raw    = document.getElementById('mc-value').value;
+
+  if (!empKey || !dayKey || !raw)
+    return showMsg('mc-msg', 'אנא בחר עובד, יום ואילוץ', 'error');
+
+  const weekKey = getWeekKey(currentWeekOffsetConstraints);
+  const [type, val] = raw.split(':');
+  const entry = type === 'shift'
+    ? { c1: val }
+    : { c1: val, status: 'approved' };  // היעדרות שמנהל מזין — מאושרת אוטומטית
+
+  await db.ref(`branches/${mgrBranchKey}/constraints/${weekKey}/${empKey}/${dayKey}`).set(entry);
+  showMsg('mc-msg', '✅ נשמר בהצלחה', 'success');
+  loadConstraints();
+}
+
+async function deleteMgrConstraint() {
+  const empKey = document.getElementById('mc-emp').value;
+  const dayKey = document.getElementById('mc-day').value;
+
+  if (!empKey || !dayKey)
+    return showMsg('mc-msg', 'אנא בחר עובד ויום', 'error');
+
+  const weekKey = getWeekKey(currentWeekOffsetConstraints);
+  await db.ref(`branches/${mgrBranchKey}/constraints/${weekKey}/${empKey}/${dayKey}`).remove();
+  showMsg('mc-msg', '🗑️ האילוץ נמחק', 'info');
+  loadConstraints();
+}
+
 async function approveAbsence(empKey, dayKey) {
   const weekKey = getWeekKey(currentWeekOffsetConstraints);
   await db.ref(`branches/${mgrBranchKey}/constraints/${weekKey}/${empKey}/${dayKey}/status`).set('approved');

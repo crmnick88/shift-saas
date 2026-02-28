@@ -65,7 +65,36 @@
         <span id="constraints-week-label" style="font-weight:bold; padding:8px 12px; background:#f0f3ff; border-radius:8px;"></span>
         <button class="btn sm secondary" onclick="changeWeekConstraints(1)">שבוע הבא →</button>
         <button class="btn sm" onclick="loadConstraints()">🔄 רענן</button>
+        <button class="btn sm success" onclick="toggleMgrConstraintForm()">✏️ הזן אילוץ ידנית</button>
       </div>
+
+      <!-- Manager manual constraint form -->
+      <div id="mgr-constraint-form" class="card" style="display:none; margin-bottom:16px;">
+        <h3 style="margin-bottom:14px;">✏️ הזנת אילוץ ידנית</h3>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+          <div class="form-group">
+            <label>עובד</label>
+            <select id="mc-emp"></select>
+          </div>
+          <div class="form-group">
+            <label>יום</label>
+            <select id="mc-day"></select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>אילוץ</label>
+          <select id="mc-value">
+            <option value="">-- בחר אילוץ --</option>
+          </select>
+        </div>
+        <div class="btn-row">
+          <button class="btn success" onclick="saveMgrConstraint()">💾 שמור</button>
+          <button class="btn danger" onclick="deleteMgrConstraint()">🗑️ מחק אילוץ ביום זה</button>
+          <button class="btn secondary" onclick="toggleMgrConstraintForm()">סגור</button>
+        </div>
+        <div id="mc-msg" class="message" style="display:none"></div>
+      </div>
+
       <div id="constraints-container">
         <p style="color:#aaa; text-align:center; padding:40px;">טוען אילוצים...</p>
       </div>
