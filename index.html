@@ -6,6 +6,11 @@
   <title>מערכת ניהול סידור עבודה</title>
   <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#667eea">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="ShiftSaaS">
+  <link rel="apple-touch-icon" href="icon-192.png">
 </head>
 <body>
 <div class="container">
@@ -255,6 +260,14 @@ async function doEmployeeLogin() {
   }
 }
 
+</script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./service-worker.js')
+        .catch(err => console.warn('SW registration failed:', err));
+    });
+  }
 </script>
 </body>
 </html>
