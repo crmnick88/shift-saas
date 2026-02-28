@@ -1,37 +1,50 @@
 // ===========================================
 // scheduler.js — אלגוריתם גנרי לסידור עבודה
-// עובד עם כל מספר משמרות, מחלקות ועובדים
 // ===========================================
 
-/**
- * generateSchedule(orgData, constraints, settings)
- * 
- * @param {object} orgData - { departments, employees, shiftTypes, constraintTypes, rules }
- * @param {object} constraints - { [empKey]: { [dayKey]: { c1, c2 } } }
- * @param {object} settings - { workDays }
- * 
- * @returns {object} schedule - { day_0: { [empKey]: shiftTypeKey|null }, day_1: {...}, ... }
- */
 function generateSchedule(orgData, constraints, settings) {
-  const workDays   = parseInt(settings.workDays) || 6;
-  const employees  = orgData.employees  || {};
+  const workDays    = parseInt(settings.workDays) || 6;
+  const employees   = orgData.employees   || {};
   const departments = orgData.departments || {};
-  const shiftTypes = orgData.shiftTypes || {};
-  const rules      = orgData.rules      || {};
+  const shiftTypes  = orgData.shiftTypes  || {};
+  const constraintTypes = orgData.constraintTypes || {};
 
   const shiftKeys = Object.keys(shiftTypes);
-  if (shiftKeys.length === 0) {
-    throw new Error('אין סוגי משמרות מוגדרים');
-  }
+  if (shiftKeys.length === 0) throw new Error('אין סוגי משמרות מוגדרים');
+
+  // ==== ניתוח משמרות: בודד / כפולה, מיין לפי שעת התחלה ====
+  const toMins = t => {
+    if (!t || !t.includes(':')) return null;
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + (m || 0);
+  };
+
+  const shiftDuration = key => {
+    const s = shiftTypes[key];
+    const st = toMins(s?.start);
+    const en = toMins(s?.end);
+    if (st === null || en === null) return 0;
+    return en >= st ? en - st : 1440 - st + en;
+  };
+
+  // מפתח כפולה = המשמרת הארוכה ביותר; בשוויון — האחרונה שהוגדרה (key גדול = timestamp גבוה)
+  const doubleShiftKey = [...shiftKeys].sort((a, b) => {
+    const da = shiftDuration(a), db = shiftDuration(b);
+    if (da !== db) return db - da;   // ארוכה יותר — קודם
+    return b.localeCompare(a);       // הוגדרה אחרונה — קודם
+  })[0] || null;
+
+  // משמרות בודדות = כל השאר חוץ מהכפולה, ממוינות לפי שעת התחלה
+  const singleShiftKeys = shiftKeys
+    .filter(k => k !== doubleShiftKey && toMins(shiftTypes[k]?.start) !== null)
+    .sort((a, b) => (shiftTypes[a].start || '99:99').localeCompare(shiftTypes[b].start || '99:99'));
 
   // Build result skeleton
   const result = {};
-  for (let d = 0; d < workDays; d++) {
-    result[`day_${d}`] = {};
-  }
+  for (let d = 0; d < workDays; d++) result[`day_${d}`] = {};
 
-  // Build per-dept employee lists
-  const deptEmployees = {}; // { deptKey: [empKey, ...] }
+  // Per-dept employee lists
+  const deptEmployees = {};
   for (const [deptKey, dept] of Object.entries(departments)) {
     deptEmployees[deptKey] = dept.employees ? Object.keys(dept.employees) : [];
   }
@@ -39,179 +52,228 @@ function generateSchedule(orgData, constraints, settings) {
   // Employee → dept map
   const empDept = {};
   for (const [deptKey, emps] of Object.entries(deptEmployees)) {
-    for (const empKey of emps) {
-      empDept[empKey] = deptKey;
-    }
+    for (const empKey of emps) empDept[empKey] = deptKey;
   }
-
-  // Also add employees not in any dept
   for (const empKey of Object.keys(employees)) {
     if (!empDept[empKey]) empDept[empKey] = null;
   }
 
-  // Constraint lookup: empKey → dayKey → [c1, c2]
+  // Constraint lookup
   function getConstraints(empKey, dayKey) {
     return constraints[empKey]?.[dayKey] || {};
   }
 
-  // Check if constraint blocks a shift
-  function isBlocked(empKey, dayKey, shiftKey) {
-    const c = getConstraints(empKey, dayKey);
-    const vals = [c.c1, c.c2].filter(Boolean);
-    const shift = shiftTypes[shiftKey] || {};
-
-    for (const val of vals) {
-      if (val === 'day-off') return true;
-      if (val === 'no-morning'  && shiftKey === shiftKeys[0]) return true;
-      if (val === 'no-evening'  && shiftKey === shiftKeys[shiftKeys.length - 1]) return true;
-      // Dynamic: if constraint value is "no-{shiftName}" check shift name
-      if (val.startsWith('no-') && shift.name && val === `no-${shift.name.toLowerCase()}`) return true;
-    }
-    return false;
+  // האם העובד נעדר ביום זה (היעדרות מאושרת)?
+  function isAbsent(empKey, dayKey) {
+    const constraint = getConstraints(empKey, dayKey);
+    const val = constraint.c1;
+    if (!val) return false;
+    if (shiftTypes[val]) return false;
+    const ctDef = constraintTypes[val] || {};
+    const isAbsence = ctDef.category === 'absence' || val === 'day-off' || val === 'sick';
+    if (!isAbsence) return false;
+    const status = constraint.status;
+    return !status || status === 'approved';
   }
 
-  // Check if employee WANTS a specific shift (positive constraint)
+  function isBlocked(empKey, dayKey) {
+    return isAbsent(empKey, dayKey);
+  }
+
   function wantsShift(empKey, dayKey, shiftKey) {
-    const c = getConstraints(empKey, dayKey);
-    const vals = [c.c1, c.c2].filter(Boolean);
-    const shift = shiftTypes[shiftKey] || {};
-
-    for (const val of vals) {
-      if (val === `want-${shift.name?.toLowerCase()}`) return true;
-      if (val === 'want-morning' && shiftKey === shiftKeys[0]) return true;
-      if (val === 'want-evening' && shiftKey === shiftKeys[shiftKeys.length - 1]) return true;
-    }
-    return false;
+    return getConstraints(empKey, dayKey).c1 === shiftKey;
   }
 
-  // Track how many shifts each employee gets (for fairness)
-  const empShiftCount = {};
-  for (const empKey of Object.keys(employees)) {
-    empShiftCount[empKey] = 0;
+  // ===================================================
+  // מעקב הוגנות: ספירה לפי סוג משמרת (לא רק סה"כ)
+  // כך כל עובד מקבל חלוקה שווה של בוקר / ערב לאורך השבוע
+  // ===================================================
+  const empShiftTypeCount = {};
+  for (const empKey of Object.keys(employees)) empShiftTypeCount[empKey] = {};
+
+  // סה"כ משמרות לעובד (לצורך מיון כללי)
+  function totalShiftCount(empKey) {
+    return Object.values(empShiftTypeCount[empKey] || {}).reduce((s, v) => s + v, 0);
   }
 
-  // =============================================
-  // MAIN SCHEDULING LOOP (per-department staffing rules)
-  // =============================================
+  // מיין רשימת עובדים לפי מספר הפעמים שעבדו shuftKey ספציפי (עולה)
+  // תיקו: לפי סה"כ משמרות (עולה)
+  function sortByShiftTypeFairness(empKeys, shiftKey) {
+    return [...empKeys].sort((a, b) => {
+      const diff = (empShiftTypeCount[a][shiftKey] || 0) - (empShiftTypeCount[b][shiftKey] || 0);
+      if (diff !== 0) return diff;
+      return totalShiftCount(a) - totalShiftCount(b);
+    });
+  }
+
+  function recordShift(empKey, shiftKey) {
+    empShiftTypeCount[empKey][shiftKey] = (empShiftTypeCount[empKey][shiftKey] || 0) + 1;
+  }
+
   const staffingRules = settings.staffingRules || {};
-  const weekKey = settings.weekKey || null;
+  const weekKey       = settings.weekKey || null;
 
   function getScopeForDayIndex(dayIndex) {
-    // If weekKey provided: decide by actual weekday (Sun..Sat)
     if (weekKey) {
       const base = new Date(weekKey);
       if (!isNaN(base.getTime())) {
         const dt = new Date(base);
         dt.setDate(dt.getDate() + dayIndex);
-        const dow = dt.getDay(); // 0=Sun ... 5=Fri ... 6=Sat
+        const dow = dt.getDay();
         if (dow === 5) return 'friday';
         if (dow === 6) return 'saturday';
-        return 'weekday'; // Sun-Thu
+        return 'weekday';
       }
     }
-    // Fallback (no dates): treat last 2 days as Fri/Sat when workDays>=6/7
     if (workDays >= 7) return (dayIndex === 5 ? 'friday' : dayIndex === 6 ? 'saturday' : 'weekday');
-    if (workDays === 6) return (dayIndex === 4 ? 'friday' : 'weekday');
+    if (workDays === 6) return (dayIndex === 5 ? 'friday' : 'weekday');
     return 'weekday';
   }
 
-  function autoDeptRequirements(empCount) {
-    // Default behavior if manager didn't define staffing rules yet.
-    // 1 employee  => first shift
-    // 2 employees => first + last
-    // 3+         => first + middle + last (if exists) otherwise first + last
+  // חישוב דרישות אוטומטיות לפי מספר עובדים זמינים + גודל מחלקה מקורי
+  function autoDeptRequirements(effectiveCount, totalCount) {
     const req = {};
-    if (empCount <= 0) return req;
-    if (empCount === 1) {
-      req[shiftKeys[0]] = 1;
+    if (effectiveCount <= 0) return req;
+
+    const base  = singleShiftKeys.length >= 2 ? singleShiftKeys : shiftKeys;
+    const first = base[0];
+    const last  = base[base.length - 1];
+    const mid   = base[Math.floor(base.length / 2)];
+
+    // מחלקה של 2: עובד אחד נעדר → הנותר מקבל כפולה
+    if (totalCount === 2 && effectiveCount === 1) {
+      const dk = doubleShiftKey || last;
+      req[dk] = 1;
       return req;
     }
-    if (empCount === 2) {
-      req[shiftKeys[0]] = 1;
-      req[shiftKeys[shiftKeys.length - 1]] = 1;
+
+    // מחלקה של 3+: עובד אחד נעדר → רק בוקר + ערב לנותרים
+    if (totalCount >= 3 && effectiveCount === totalCount - 1) {
+      req[first] = 1;
+      req[last]  = 1;
       return req;
     }
+
+    // נורמלי
+    if (effectiveCount === 1) { req[first] = 1; return req; }
+    if (effectiveCount === 2) { req[first] = 1; req[last] = 1; return req; }
     // 3+
-    req[shiftKeys[0]] = 1;
-    if (shiftKeys.length >= 3) {
-      // "middle" = the second shift in order (manager controls ordering)
-      req[shiftKeys[1]] = 1;
-    }
-    req[shiftKeys[shiftKeys.length - 1]] = 1;
+    req[first] = 1;
+    if (base.length >= 3) req[mid] = 1;
+    req[last] = 1;
     return req;
   }
 
   for (let d = 0; d < workDays; d++) {
-    const dayKey = `day_${d}`;
-    const scope = getScopeForDayIndex(d);
+    const dayKey     = `day_${d}`;
+    const scope      = getScopeForDayIndex(d);
     const scopeRules = staffingRules[scope] || {};
 
-    // Process department by department
     for (const [deptKey, dept] of Object.entries(departments)) {
       const emps = deptEmployees[deptKey] || [];
       if (emps.length === 0) continue;
 
-      // Required slots per shift for this department
+      const effectiveCount = emps.filter(e => !isAbsent(e, dayKey)).length;
+
       const deptRule = scopeRules[deptKey] || {};
       let required = {};
       if (deptRule && Object.keys(deptRule).length > 0) {
-        // keep only valid shift keys
-        for (const [shiftKey, val] of Object.entries(deptRule)) {
+        for (const [sk, val] of Object.entries(deptRule)) {
           const n = parseInt(val);
-          if (shiftTypes[shiftKey] && Number.isFinite(n) && n > 0) required[shiftKey] = n;
+          if (shiftTypes[sk] && Number.isFinite(n) && n > 0) required[sk] = n;
         }
       } else {
-        required = autoDeptRequirements(emps.length);
+        required = autoDeptRequirements(effectiveCount, emps.length);
       }
 
-      // If no requirements, everyone off for the day
       if (Object.keys(required).length === 0) {
         for (const empKey of emps) result[dayKey][empKey] = null;
         continue;
       }
 
-      // Sort employees: prefer those with fewer shifts assigned (fairness)
-      const sorted = [...emps].sort((a, b) => empShiftCount[a] - empShiftCount[b]);
+      // מיון ראשוני לפי סה"כ משמרות (עובדים עם פחות משמרות — קודם)
+      const sorted     = [...emps].sort((a, b) => totalShiftCount(a) - totalShiftCount(b));
       const unassigned = new Set(sorted);
 
-      // Assign per shiftKey required count:
+      function wantsOtherShift(empKey, shiftKey) {
+        return shiftKeys.some(sk => sk !== shiftKey && wantsShift(empKey, dayKey, sk));
+      }
+
+      // Pass 1: עובדים שביקשו את המשמרת הספציפית הזו
+      // מיון: מי עבד פחות בסוג זה — קודם
       for (const shiftKey of Object.keys(required)) {
         let need = required[shiftKey];
-
-        // Pass 1: wants
-        for (const empKey of sorted) {
+        const candidates = sortByShiftTypeFairness([...unassigned], shiftKey);
+        for (const empKey of candidates) {
           if (need <= 0) break;
-          if (!unassigned.has(empKey)) continue;
-          if (wantsShift(empKey, dayKey, shiftKey) && !isBlocked(empKey, dayKey, shiftKey)) {
+          if (wantsShift(empKey, dayKey, shiftKey) && !isBlocked(empKey, dayKey)) {
             result[dayKey][empKey] = shiftKey;
-            empShiftCount[empKey]++;
-            unassigned.delete(empKey);
-            need--;
-          }
-        }
-
-        // Pass 2: any available
-        for (const empKey of sorted) {
-          if (need <= 0) break;
-          if (!unassigned.has(empKey)) continue;
-          if (!isBlocked(empKey, dayKey, shiftKey)) {
-            result[dayKey][empKey] = shiftKey;
-            empShiftCount[empKey]++;
+            recordShift(empKey, shiftKey);
             unassigned.delete(empKey);
             need--;
           }
         }
       }
 
-      // Any remaining employees in department are day off / not scheduled
-      for (const empKey of sorted) {
-        if (result[dayKey][empKey] === undefined) {
-          result[dayKey][empKey] = null;
+      // Pass 2: עובדים ללא העדפה ספציפית (שיבוץ חופשי — מיון לפי סוג משמרת)
+      for (const shiftKey of Object.keys(required)) {
+        const alreadyIn = sorted.filter(e => result[dayKey][e] === shiftKey).length;
+        let need = required[shiftKey] - alreadyIn;
+        const candidates = sortByShiftTypeFairness([...unassigned], shiftKey);
+        for (const empKey of candidates) {
+          if (need <= 0) break;
+          if (isBlocked(empKey, dayKey)) continue;
+          if (wantsOtherShift(empKey, shiftKey)) continue;
+          result[dayKey][empKey] = shiftKey;
+          recordShift(empKey, shiftKey);
+          unassigned.delete(empKey);
+          need--;
         }
+      }
+
+      // Pass 3: גיבוי — עובדים שביקשו משמרת אחרת אך לא קיבלו אותה
+      for (const shiftKey of Object.keys(required)) {
+        const alreadyIn = sorted.filter(e => result[dayKey][e] === shiftKey).length;
+        let need = required[shiftKey] - alreadyIn;
+        const candidates = sortByShiftTypeFairness([...unassigned], shiftKey);
+        for (const empKey of candidates) {
+          if (need <= 0) break;
+          if (!isBlocked(empKey, dayKey)) {
+            result[dayKey][empKey] = shiftKey;
+            recordShift(empKey, shiftKey);
+            unassigned.delete(empKey);
+            need--;
+          }
+        }
+      }
+
+      // Pass 4: כפולה — ממלא חוסרים עם עובדים שכבר משובצים
+      for (const shiftKey of Object.keys(required)) {
+        const filled = sorted.filter(empK => {
+          const v = result[dayKey][empK];
+          return v && (v === shiftKey || String(v).split('|').includes(shiftKey));
+        }).length;
+        let need = required[shiftKey] - filled;
+        for (const empKey of sorted) {
+          if (need <= 0) break;
+          const current = result[dayKey][empKey];
+          if (!current) continue;
+          const currentShifts = String(current).split('|');
+          if (currentShifts.includes(shiftKey)) continue;
+          if (!isBlocked(empKey, dayKey)) {
+            result[dayKey][empKey] = current + '|' + shiftKey;
+            need--;
+          }
+        }
+      }
+
+      // שאר העובדים → חופש
+      for (const empKey of sorted) {
+        if (result[dayKey][empKey] === undefined) result[dayKey][empKey] = null;
       }
     }
 
-    // Also mark employees not in any dept (optional): day off
+    // עובדים שלא במחלקה → חופש
     for (const empKey of Object.keys(employees)) {
       if (empDept[empKey] === null && result[dayKey][empKey] === undefined) {
         result[dayKey][empKey] = null;

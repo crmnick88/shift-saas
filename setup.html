@@ -65,6 +65,16 @@
         <option value="en">אנגלית</option>
       </select>
     </div>
+    <div class="form-group">
+      <label>כמה אילוצים מותר לכל עובד לשבוע?</label>
+      <select id="s1-constraints-per-week">
+        <option value="1">1 אילוץ לשבוע</option>
+        <option value="2" selected>2 אילוצים לשבוע</option>
+        <option value="3">3 אילוצים לשבוע</option>
+        <option value="4">4 אילוצים לשבוע</option>
+        <option value="5">5 אילוצים לשבוע</option>
+      </select>
+    </div>
     <button class="btn" onclick="saveStep1()">המשך ←</button>
     <div id="s1-msg" class="message" style="display:none"></div>
   </div>
@@ -181,44 +191,30 @@
     <div id="s4-msg" class="message" style="display:none"></div>
   </div>
 
-  <!-- ===== STEP 5: Constraint Types ===== -->
+  <!-- ===== STEP 5: Absence Types ===== -->
   <div id="step-5" class="section">
-    <h2>⚠️ סוגי אילוצים</h2>
-    <p style="color:#888; margin-bottom:16px;">הגדר אילו אילוצים עובד יכול לבקש. לדוג׳: "לא רוצה בוקר", "חופש מלא", "רוצה ערב".</p>
+    <h2>🏖️ סוגי היעדרות</h2>
+    <p style="color:#888; margin-bottom:16px;">הגדר את סוגי ההיעדרות שעובד יכול לבקש. לדוג׳: חופש, מחלה, מילואים.</p>
+    <p style="background:#e8f4fd; border-radius:8px; padding:10px 14px; font-size:0.9em; color:#2b6cb0;">
+      💡 בחירת משמרת מועדפת (בוקר / ערב / כפולה וכו׳) מתבצעת ישירות בממשק העובד — אין צורך להגדיר כאן.
+    </p>
 
     <div id="constraint-types-list"></div>
 
     <hr class="divider">
-    <h3>➕ הוסף סוג אילוץ</h3>
+    <h3>➕ הוסף סוג היעדרות</h3>
     <div class="card">
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
         <div class="form-group">
           <label>תווית (מה העובד רואה)</label>
-          <input type="text" id="new-ct-label" placeholder="לדוג׳: ❌ לא בוקר">
+          <input type="text" id="new-ct-label" placeholder="לדוג׳: 🏖️ חופש, 🤒 מחלה">
         </div>
         <div class="form-group">
           <label>ערך פנימי (קוד)</label>
-          <input type="text" id="new-ct-value" placeholder="לדוג׳: no-morning" oninput="this.value=this.value.toLowerCase().replace(/ /g,'-')">
+          <input type="text" id="new-ct-value" placeholder="לדוג׳: day-off, sick" oninput="this.value=this.value.toLowerCase().replace(/ /g,'-')">
         </div>
       </div>
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-        <div class="form-group">
-          <label>קטגוריה</label>
-          <select id="new-ct-category">
-            <option value="preference">העדפה (רוצה / לא רוצה)</option>
-            <option value="absence">היעדרות (חופש / מחלה)</option>
-            <option value="custom">אחר</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>חל על</label>
-          <select id="new-ct-scope">
-            <option value="all">כל העובדים</option>
-            <option value="dept">מחלקה ספציפית</option>
-          </select>
-        </div>
-      </div>
-      <button class="btn sm success" onclick="addConstraintType()">➕ הוסף אילוץ</button>
+      <button class="btn sm success" onclick="addConstraintType()">➕ הוסף היעדרות</button>
     </div>
 
     <div class="btn-row">

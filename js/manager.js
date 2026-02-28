@@ -4,6 +4,7 @@
 
 let mgrBranchKey = null;
 let orgData      = {};
+let mgrSettings  = {};
 let currentWeekOffset = 0;
 let currentWeekOffsetConstraints = 0;
 let currentScheduleData = {};
@@ -20,14 +21,16 @@ auth.onAuthStateChanged(async (user) => {
   if (!mgrBranchKey) { window.location.href = 'index.html'; return; }
 
   // Load all org data
-const [orgSnap, nameSnap, subSnap, codeSnap] = await Promise.all([
+const [orgSnap, nameSnap, subSnap, codeSnap, settSnap] = await Promise.all([
   db.ref(`branches/${mgrBranchKey}/org`).once('value'),
   db.ref(`branches/${mgrBranchKey}/displayName`).once('value'),
   db.ref(`branches/${mgrBranchKey}/subscription`).once('value').catch(() => null),
   db.ref(`branches/${mgrBranchKey}/branchCode`).once('value'),
+  db.ref(`branches/${mgrBranchKey}/settings`).once('value'),
 ]);
 
-orgData = orgSnap.val() || {};
+orgData     = orgSnap.val()  || {};
+mgrSettings = settSnap.val() || {};
 
 document.getElementById('mgr-branch-name').textContent = '🏢 ' + (nameSnap.val() || 'פורטל ניהול');
 
@@ -78,13 +81,13 @@ function switchTab(tabId) {
 // ===========================================
 function getWeekKey(offset = 0) {
   const d = new Date();
-  d.setDate(d.getDate() - d.getDay() + 1 + offset * 7);
+  d.setDate(d.getDate() - d.getDay() + offset * 7);
   return d.toISOString().slice(0, 10);
 }
 
 function formatWeekLabel(offset = 0) {
   const start = new Date();
-  start.setDate(start.getDate() - start.getDay() + 1 + offset * 7);
+  start.setDate(start.getDate() - start.getDay() + offset * 7);
   const end = new Date(start);
   end.setDate(end.getDate() + 6);
   return `${start.toLocaleDateString('he-IL')} — ${end.toLocaleDateString('he-IL')}`;
@@ -112,6 +115,8 @@ function changeWeekConstraints(delta) {
 // ===========================================
 async function loadExistingSchedule() {
   const weekKey = getWeekKey(currentWeekOffset);
+  const settSnap = await db.ref(`branches/${mgrBranchKey}/settings`).once('value');
+  mgrSettings = settSnap.val() || mgrSettings;
   const snap    = await db.ref(`branches/${mgrBranchKey}/schedules/${weekKey}`).once('value');
   const data    = snap.val();
 
@@ -124,15 +129,25 @@ async function loadExistingSchedule() {
   }
 }
 
-async function generateSchedule() {
-  const weekKey    = getWeekKey(currentWeekOffset);
-  const settings   = (await db.ref(`branches/${mgrBranchKey}/settings`).once('value')).val() || {};
-  const staffingRules = (await db.ref(`branches/${mgrBranchKey}/staffingRules`).once('value')).val() || {};
-  settings.staffingRules = staffingRules;
+async function runAutoSchedule() {
+  const weekKey = getWeekKey(currentWeekOffset);
+  showMsg('schedule-msg', '⚡ טוען נתונים...', 'info');
+
+  // טוען הכל מחדש — כולל orgData — כדי לא להשתמש בנתונים ישנים מהכניסה לדף
+  const [freshOrgSnap, settSnap, staffSnap, cSnap] = await Promise.all([
+    db.ref(`branches/${mgrBranchKey}/org`).once('value'),
+    db.ref(`branches/${mgrBranchKey}/settings`).once('value'),
+    db.ref(`branches/${mgrBranchKey}/staffingRules`).once('value'),
+    db.ref(`branches/${mgrBranchKey}/constraints/${weekKey}`).once('value'),
+  ]);
+
+  orgData     = freshOrgSnap.val() || orgData;
+  mgrSettings = settSnap.val()     || mgrSettings;
+
+  const settings = { ...mgrSettings };
+  settings.staffingRules = staffSnap.val() || {};
   settings.weekKey = weekKey;
 
-  // Load constraints for this week
-  const cSnap      = await db.ref(`branches/${mgrBranchKey}/constraints/${weekKey}`).once('value');
   const constraints = cSnap.val() || {};
 
   showMsg('schedule-msg', '⚡ מחשב סידור...', 'info');
@@ -140,14 +155,14 @@ async function generateSchedule() {
   try {
     const schedule = window.generateSchedule(orgData, constraints, settings);
     currentScheduleData = { ...schedule, status: 'draft', generatedAt: Date.now() };
-
     await db.ref(`branches/${mgrBranchKey}/schedules/${weekKey}`).set(currentScheduleData);
     renderScheduleTable(currentScheduleData);
-    showMsg('schedule-msg', '✅ הסידור נוצר בהצלחה — תוכל לערוך לפני פרסום', 'success');
+    showMsg('schedule-msg', '✅ הסידור נוצר — תוכל לערוך לפני פרסום', 'success');
   } catch (e) {
     showMsg('schedule-msg', '❌ ' + e.message, 'error');
   }
 }
+
 
 async function publishSchedule() {
   const weekKey = getWeekKey(currentWeekOffset);
@@ -159,9 +174,7 @@ async function publishSchedule() {
 }
 
 function renderScheduleTable(schedule) {
-  const workDays   = parseInt((orgData.settings || {}).workDays) || 6;
-  const settings   = orgData.settings || {};
-  const ws         = parseInt(settings.workDays) || 6;
+  const ws = parseInt(mgrSettings.workDays) || 6;
   const departments = orgData.departments || {};
   const employees  = orgData.employees  || {};
   const shiftTypes = orgData.shiftTypes || {};
@@ -180,11 +193,14 @@ function renderScheduleTable(schedule) {
       html += `<tr><td style="font-weight:bold">${emp.displayName || empKey}</td>`;
       for (let d = 0; d < ws; d++) {
         const dayKey   = `day_${d}`;
-        const shiftKey = schedule[dayKey]?.[empKey];
-        if (shiftKey) {
-          const st = shiftTypes[shiftKey] || { name: shiftKey };
-          const idx = Object.keys(shiftTypes).indexOf(shiftKey);
-          html += `<td><span class="shift-chip shift-color-${idx % 6}">${st.name}</span></td>`;
+        const shiftVal = schedule[dayKey]?.[empKey];
+        if (shiftVal) {
+          const chips = String(shiftVal).split('|').map(sk => {
+            const st  = shiftTypes[sk] || { name: sk };
+            const idx = Object.keys(shiftTypes).indexOf(sk);
+            return `<span class="shift-chip shift-color-${idx % 6}">${st.name}</span>`;
+          }).join(' ');
+          html += `<td>${chips}</td>`;
         } else {
           html += `<td><span style="color:#ccc">—</span></td>`;
         }
@@ -212,6 +228,7 @@ async function loadConstraints() {
   const workDays    = parseInt(settings.workDays) || 6;
   const employees   = orgData.employees || {};
   const ctypes      = orgData.constraintTypes || {};
+  const shiftTypes  = orgData.shiftTypes || {};
   const dayNames    = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 
   const container = document.getElementById('constraints-container');
@@ -232,14 +249,49 @@ async function loadConstraints() {
       <h4>👤 ${emp.displayName || empKey} ${hasAny ? '' : '<span style="color:#aaa; font-weight:normal;">(לא הגיש)</span>'}</h4>`;
 
     if (hasAny) {
-      html += `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;">`;
+      html += `<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:6px;">`;
       for (let d = 0; d < workDays; d++) {
-        const dayKey  = `day_${d}`;
-        const dayData = empCons[dayKey] || {};
-        const parts   = [dayData.c1, dayData.c2].filter(Boolean);
-        if (parts.length > 0) {
-          const labels = parts.map(v => ctypes[v]?.label || v);
-          html += `<span class="badge yellow">יום ${dayNames[d]}: ${labels.join(', ')}</span>`;
+        const dayKey = `day_${d}`;
+        const entry  = empCons[dayKey] || {};
+        const c1     = entry.c1;
+        if (!c1) continue;
+
+        if (shiftTypes[c1]) {
+          // משמרת מועדפת — badge פשוט
+          html += `<span class="badge" style="background:#ebf8ff; color:#2b6cb0; border:1px solid #bee3f8;
+            padding:4px 10px; border-radius:20px; font-size:0.85em;">
+            יום ${dayNames[d]}: ⭐ ${shiftTypes[c1].name}
+          </span>`;
+        } else {
+          // בקשת היעדרות — כרטיס עם כפתורי אישור/דחייה
+          const ctDef  = ctypes[c1] || {};
+          const label  = ctDef.label || c1;
+          const status = entry.status;
+          let statusLabel, statusColor;
+          if (!status || status === 'approved') {
+            statusLabel = '✅ אושר';  statusColor = '#276749';
+          } else if (status === 'rejected') {
+            statusLabel = '❌ נדחה';  statusColor = '#c53030';
+          } else {
+            statusLabel = '⏳ ממתין לאישור';  statusColor = '#b7791f';
+          }
+
+          html += `
+            <div style="background:#fff5f5; border:1px solid #fed7d7; border-radius:8px;
+                        padding:8px 12px; min-width:160px;">
+              <div style="font-size:0.9em; margin-bottom:4px;">
+                <strong>יום ${dayNames[d]}</strong>: ${label}
+              </div>
+              <div style="font-size:0.82em; color:${statusColor}; margin-bottom:6px;">${statusLabel}</div>
+              <div style="display:flex; gap:4px;">
+                <button onclick="approveAbsence('${empKey}','${dayKey}')"
+                  style="padding:3px 10px; border-radius:5px; border:none; background:#c6f6d5;
+                         color:#276749; cursor:pointer; font-size:0.82em;">✅ אשר</button>
+                <button onclick="rejectAbsence('${empKey}','${dayKey}')"
+                  style="padding:3px 10px; border-radius:5px; border:none; background:#fed7d7;
+                         color:#c53030; cursor:pointer; font-size:0.82em;">❌ דחה</button>
+              </div>
+            </div>`;
         }
       }
       html += `</div>`;
@@ -249,6 +301,18 @@ async function loadConstraints() {
   }
 
   container.innerHTML = html || '<p style="color:#aaa; text-align:center;">אין אילוצים לשבוע זה</p>';
+}
+
+async function approveAbsence(empKey, dayKey) {
+  const weekKey = getWeekKey(currentWeekOffsetConstraints);
+  await db.ref(`branches/${mgrBranchKey}/constraints/${weekKey}/${empKey}/${dayKey}/status`).set('approved');
+  loadConstraints();
+}
+
+async function rejectAbsence(empKey, dayKey) {
+  const weekKey = getWeekKey(currentWeekOffsetConstraints);
+  await db.ref(`branches/${mgrBranchKey}/constraints/${weekKey}/${empKey}/${dayKey}/status`).set('rejected');
+  loadConstraints();
 }
 
 // ===========================================
@@ -356,6 +420,124 @@ async function renderBranchInfo() {
   `;
 }
 
+
+// ===========================================
+// EXCEL EXPORT
+// ===========================================
+function exportToExcel() {
+  if (!currentScheduleData || Object.keys(currentScheduleData).length === 0)
+    return showMsg('schedule-msg', 'אין סידור לייצוא', 'error');
+
+  const ws_data = parseInt(mgrSettings.workDays) || 6;
+  const departments = orgData.departments || {};
+  const employees   = orgData.employees   || {};
+  const shiftTypes  = orgData.shiftTypes  || {};
+  const shiftKeys   = Object.keys(shiftTypes);
+  const dayNames    = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+
+  // Shift color palette: bg / font — matches shift-color-0..5
+  const SHIFT_COLORS = [
+    { bg: 'FFF3CD', font: '856404' },
+    { bg: 'FFD4A3', font: '7A4100' },
+    { bg: 'D1ECF1', font: '0C5460' },
+    { bg: 'D4EDDA', font: '155724' },
+    { bg: 'E7D4F5', font: '5A1A7A' },
+    { bg: 'FCE4EC', font: '880E4F' },
+  ];
+
+  const HEADER_BG   = '667EEA';
+  const DEPT_BG     = 'EEF0FF';
+  const OFF_BG      = 'F0F0F0';
+  const BORDER      = { style: 'thin', color: { rgb: 'CCCCCC' } };
+  const cellBorder  = { top: BORDER, bottom: BORDER, left: BORDER, right: BORDER };
+
+  function makeCell(v, opts = {}) {
+    return {
+      v,
+      t: 's',
+      s: {
+        font:      { name: 'Arial', sz: 11, bold: opts.bold || false, color: { rgb: opts.fontColor || '333333' } },
+        fill:      opts.bg ? { fgColor: { rgb: opts.bg }, patternType: 'solid' } : { patternType: 'none' },
+        alignment: { horizontal: 'center', vertical: 'center', wrapText: true, readingOrder: 2 },
+        border:    cellBorder,
+      }
+    };
+  }
+
+  const rows = [];
+  const deptRowIndices = [];
+
+  // ── Header row ──────────────────────────────────
+  const headerRow = [makeCell('עובד', { bold: true, bg: HEADER_BG, fontColor: 'FFFFFF' })];
+  for (let d = 0; d < ws_data; d++) {
+    headerRow.push(makeCell(dayNames[d], { bold: true, bg: HEADER_BG, fontColor: 'FFFFFF' }));
+  }
+  rows.push(headerRow);
+
+  // ── Department + employee rows ───────────────────
+  for (const [, dept] of Object.entries(departments)) {
+    // Dept divider — track row index for merging
+    deptRowIndices.push(rows.length);
+    const deptRow = [makeCell('🏬 ' + dept.name, { bold: true, bg: DEPT_BG, fontColor: '3D3D8F' })];
+    for (let d = 0; d < ws_data; d++) {
+      deptRow.push(makeCell('', { bg: DEPT_BG }));
+    }
+    rows.push(deptRow);
+
+    const deptEmps = dept.employees ? Object.keys(dept.employees) : [];
+    for (const empKey of deptEmps) {
+      const emp = employees[empKey] || {};
+      const row = [makeCell(emp.displayName || empKey, { bold: true })];
+
+      for (let d = 0; d < ws_data; d++) {
+        const dayKey   = `day_${d}`;
+        const shiftVal = currentScheduleData[dayKey]?.[empKey];
+
+        if (shiftVal) {
+          // May be "shift_A|shift_B" for double
+          const parts = String(shiftVal).split('|');
+          const names = parts.map(sk => shiftTypes[sk]?.name || sk).join(' + ');
+          // Use color of first shift
+          const idx   = shiftKeys.indexOf(parts[0]);
+          const col   = SHIFT_COLORS[idx >= 0 ? idx % 6 : 0];
+          row.push(makeCell(names, { bg: col.bg, fontColor: col.font }));
+        } else {
+          row.push(makeCell('חופש', { bg: OFF_BG, fontColor: '999999' }));
+        }
+      }
+      rows.push(row);
+    }
+  }
+
+  // ── Build worksheet ──────────────────────────────
+  const ws = {};
+  const range = { s: { r: 0, c: 0 }, e: { r: rows.length - 1, c: ws_data } };
+
+  rows.forEach((row, r) => {
+    row.forEach((cell, c) => {
+      const addr = XLSX.utils.encode_cell({ r, c });
+      ws[addr] = cell;
+    });
+  });
+
+  ws['!ref'] = XLSX.utils.encode_range(range);
+
+  // Merge dept divider rows across all columns
+  ws['!merges'] = deptRowIndices.map(r => ({ s: { r, c: 0 }, e: { r, c: ws_data } }));
+
+  // Column widths (10 chars each)
+  ws['!cols'] = Array.from({ length: ws_data + 1 }, () => ({ wch: 10 }));
+
+  // Row heights (30pt)
+  ws['!rows'] = rows.map(() => ({ hpt: 30 }));
+
+  // ── Workbook ─────────────────────────────────────
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'סידור');
+
+  const weekLabel = formatWeekLabel(currentWeekOffset).replace(' — ', '_').replace(/\//g, '-');
+  XLSX.writeFile(wb, `סידור_${weekLabel}.xlsx`);
+}
 
 // ===========================================
 // HELPERS

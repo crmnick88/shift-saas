@@ -47,8 +47,9 @@
         <button class="btn sm secondary" onclick="changeWeek(-1)">← שבוע קודם</button>
         <span id="schedule-week-label" style="font-weight:bold; padding:8px 12px; background:#f0f3ff; border-radius:8px;"></span>
         <button class="btn sm secondary" onclick="changeWeek(1)">שבוע הבא →</button>
-        <button class="btn sm" onclick="generateSchedule()">⚡ צור סידור אוטומטי</button>
+        <button class="btn sm" onclick="runAutoSchedule()">⚡ צור סידור אוטומטי</button>
         <button class="btn sm success" onclick="publishSchedule()">📢 פרסם לעובדים</button>
+        <button class="btn sm secondary" onclick="exportToExcel()">📊 ייצוא לאקסל</button>
       </div>
 
       <div id="schedule-container">
@@ -127,6 +128,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="js/firebase.js"></script>
 <script src="js/scheduler.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <script src="js/manager.js"></script>
 </body>
 </html>

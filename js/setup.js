@@ -50,6 +50,11 @@ async function loadExistingData() {
     if (nameSnap.val()) {
       document.getElementById('s1-name').value = nameSnap.val();
     }
+    const settSnap = await db.ref(`branches/${branchKey}/settings`).once('value');
+    const sett = settSnap.val() || {};
+    if (sett.workDays)           document.getElementById('s1-work-days').value           = sett.workDays;
+    if (sett.lang)               document.getElementById('s1-lang').value               = sett.lang;
+    if (sett.constraintsPerWeek) document.getElementById('s1-constraints-per-week').value = sett.constraintsPerWeek;
   } catch (e) { console.warn('loadExistingData:', e); }
 }
 
@@ -93,14 +98,15 @@ function renderAll() {
 // STEP 1 — Business Info
 // ===========================================
 async function saveStep1() {
-  const name     = document.getElementById('s1-name').value.trim();
-  const workDays = document.getElementById('s1-work-days').value;
-  const lang     = document.getElementById('s1-lang').value;
+  const name               = document.getElementById('s1-name').value.trim();
+  const workDays           = document.getElementById('s1-work-days').value;
+  const lang               = document.getElementById('s1-lang').value;
+  const constraintsPerWeek = parseInt(document.getElementById('s1-constraints-per-week').value) || 2;
 
   if (!name) return showMsg('s1-msg', 'אנא הזן שם עסק', 'error');
 
   await db.ref(`branches/${branchKey}/displayName`).set(name);
-  await db.ref(`branches/${branchKey}/settings`).update({ workDays: parseInt(workDays), lang });
+  await db.ref(`branches/${branchKey}/settings`).update({ workDays: parseInt(workDays), lang, constraintsPerWeek });
 
   goStep(2);
 }
@@ -290,36 +296,29 @@ async function saveStep4() {
 }
 
 // ===========================================
-// STEP 5 — Constraint Types
+// STEP 5 — Absence Types
 // ===========================================
-// Defaults to pre-populate
 const DEFAULT_CONSTRAINT_TYPES = {
-  'no-morning':  { label: '❌ לא בוקר',    value: 'no-morning',  category: 'preference', scope: 'all' },
-  'no-evening':  { label: '❌ לא ערב',     value: 'no-evening',  category: 'preference', scope: 'all' },
-  'day-off':     { label: '🏖️ חופש מלא',  value: 'day-off',     category: 'absence',    scope: 'all' },
-  'want-morning':{ label: '✅ רוצה בוקר',  value: 'want-morning',category: 'preference', scope: 'all' },
-  'want-evening':{ label: '✅ רוצה ערב',   value: 'want-evening',category: 'preference', scope: 'all' },
+  'day-off': { label: '🏖️ חופש מלא', value: 'day-off', category: 'absence', scope: 'all' },
+  'sick':    { label: '🤒 מחלה',      value: 'sick',    category: 'absence', scope: 'all' },
 };
 
 function loadDefaultConstraints() {
-  // Only load defaults if nothing defined yet
   if (Object.keys(setupData.constraintTypes).length === 0) {
     Object.assign(setupData.constraintTypes, DEFAULT_CONSTRAINT_TYPES);
     renderConstraintTypes();
-    showMsg('s5-msg', '✅ הוספנו אילוצים בסיסיים — תוכל לערוך או להוסיף', 'info');
+    showMsg('s5-msg', '✅ נטענו היעדרויות בסיסיות', 'info');
   }
 }
 
 function addConstraintType() {
-  const label    = document.getElementById('new-ct-label').value.trim();
-  const value    = document.getElementById('new-ct-value').value.trim();
-  const category = document.getElementById('new-ct-category').value;
-  const scope    = document.getElementById('new-ct-scope').value;
+  const label = document.getElementById('new-ct-label').value.trim();
+  const value = document.getElementById('new-ct-value').value.trim();
 
   if (!label || !value) return showMsg('s5-msg', 'תווית וערך הם שדות חובה', 'error');
   if (setupData.constraintTypes[value]) return showMsg('s5-msg', 'ערך זה כבר קיים', 'error');
 
-  setupData.constraintTypes[value] = { label, value, category, scope };
+  setupData.constraintTypes[value] = { label, value, category: 'absence', scope: 'all' };
   renderConstraintTypes();
 
   document.getElementById('new-ct-label').value = '';
@@ -337,18 +336,16 @@ function renderConstraintTypes() {
   const entries = Object.entries(setupData.constraintTypes);
   if (entries.length === 0) {
     el.innerHTML = `
-      <p style="color:#aaa; text-align:center; padding:10px;">אין אילוצים מוגדרים</p>
-      <button class="btn secondary sm" onclick="loadDefaultConstraints()" style="display:block; margin:10px auto; width:auto">📋 טען אילוצים בסיסיים</button>
+      <p style="color:#aaa; text-align:center; padding:10px;">אין סוגי היעדרות מוגדרים</p>
+      <button class="btn secondary sm" onclick="loadDefaultConstraints()" style="display:block; margin:10px auto; width:auto">📋 טען היעדרויות בסיסיות</button>
     `;
     return;
   }
-
-  const catNames = { preference: 'העדפה', absence: 'היעדרות', custom: 'אחר' };
   el.innerHTML = entries.map(([key, ct]) => `
     <div class="list-item">
       <div>
         <div class="item-name">${ct.label}</div>
-        <div class="item-meta">${catNames[ct.category] || ct.category} | ${ct.scope === 'all' ? 'כל העובדים' : 'מחלקה ספציפית'} | קוד: <code>${ct.value}</code></div>
+        <div class="item-meta">קוד: <code>${ct.value}</code></div>
       </div>
       <div class="item-actions">
         <button class="btn sm danger" onclick="removeConstraintType('${key}')">🗑️</button>

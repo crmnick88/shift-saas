@@ -12,6 +12,14 @@ let branchConstraintTypes = {};
 let currentWeekOffset = 0;
 let currentWeekOffsetSchedule = 0;
 
+// פרטי מחלקה של העובד
+let empDeptKey          = null;
+let empDeptEmpCount     = 0;
+let deptColleagueKeys   = []; // שמות משתמש של קולגות באותה מחלקה
+
+// אילוצי קולגות לצורך בדיקת התנגשויות
+let deptColleagueConstraints = {}; // { empKey: { day_0: {...}, ... } }
+
 // ===========================================
 // INIT
 // ===========================================
@@ -22,23 +30,33 @@ window.addEventListener('load', async () => {
   }
 
   try {
-    // Load branch data
-    const [settingsSnap, shiftSnap, ctSnap, nameSnap] = await Promise.all([
+    const [settingsSnap, shiftSnap, ctSnap, nameSnap, empDataSnap] = await Promise.all([
       db.ref(`branches/${empBranchKey}/settings`).once('value'),
       db.ref(`branches/${empBranchKey}/org/shiftTypes`).once('value'),
       db.ref(`branches/${empBranchKey}/org/constraintTypes`).once('value'),
       db.ref(`branches/${empBranchKey}/displayName`).once('value'),
+      db.ref(`branches/${empBranchKey}/org/employees/${empUsername}`).once('value'),
     ]);
 
     branchSettings        = settingsSnap.val() || {};
     branchShiftTypes      = shiftSnap.val()    || {};
     branchConstraintTypes = ctSnap.val()       || {};
 
+    // טעינת פרטי מחלקה + קולגות
+    const empData = empDataSnap.val() || {};
+    empDeptKey = empData.dept || null;
+    if (empDeptKey) {
+      const deptSnap = await db.ref(`branches/${empBranchKey}/org/departments/${empDeptKey}/employees`).once('value');
+      const deptEmpsObj = deptSnap.val() || {};
+      empDeptEmpCount   = Object.keys(deptEmpsObj).length;
+      deptColleagueKeys = Object.keys(deptEmpsObj).filter(k => k !== empUsername);
+    }
+
     document.getElementById('emp-welcome').textContent = `שלום ${empDisplayName}! 👋`;
     document.getElementById('emp-branch-name').textContent = nameSnap.val() || '';
 
     showScreen('screen-main');
-    renderConstraintDays();
+    loadConstraintDays();
     renderMySchedule();
   } catch (e) {
     alert('שגיאה בטעינה: ' + e.message);
@@ -55,13 +73,13 @@ function showScreen(id) {
 // ===========================================
 function getWeekKey(offset = 0) {
   const d = new Date();
-  d.setDate(d.getDate() - d.getDay() + 1 + offset * 7); // Monday
+  d.setDate(d.getDate() - d.getDay() + offset * 7);
   return d.toISOString().slice(0, 10);
 }
 
 function formatWeekLabel(offset = 0) {
   const start = new Date();
-  start.setDate(start.getDate() - start.getDay() + 1 + offset * 7);
+  start.setDate(start.getDate() - start.getDay() + offset * 7);
   const end = new Date(start);
   end.setDate(end.getDate() + 6);
   return `${start.toLocaleDateString('he-IL')} — ${end.toLocaleDateString('he-IL')}`;
@@ -81,77 +99,236 @@ function switchTab(tabId) {
 // ===========================================
 // CONSTRAINTS
 // ===========================================
-let savedConstraints = {}; // { dayKey: { c1: value, c2: value } }
+let savedConstraints = {}; // { dayKey: { c1: shiftKey | absenceValue, status?: string } }
+
+function _getAbsenceValues() {
+  const keys = new Set(['day-off', 'sick']);
+  Object.values(branchConstraintTypes).forEach(ct => {
+    if (ct.category === 'absence') keys.add(ct.value);
+  });
+  return keys;
+}
+
+// מחזיר את מפתחות המשמרות הרלוונטיות לפי גודל המחלקה של העובד
+// כפולה = המשמרת הארוכה ביותר (בשוויון — האחרונה שהוגדרה) — לא מוצגת כבחירה
+function getRelevantShiftKeys() {
+  const allEntries = Object.entries(branchShiftTypes);
+  if (allEntries.length === 0) return [];
+  if (empDeptEmpCount === 0) return allEntries.map(([k]) => k);
+
+  const toMins = t => {
+    if (!t || !t.includes(':')) return null;
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + (m || 0);
+  };
+  const getDur = ([, s]) => {
+    const st = toMins(s.start), en = toMins(s.end);
+    if (st === null || en === null) return 0;
+    return en >= st ? en - st : 1440 - st + en;
+  };
+
+  // כפולה = ארוכה ביותר; בשוויון — האחרונה שהוגדרה (key גדול = timestamp גבוה)
+  const doubleEntry = [...allEntries].sort((a, b) => {
+    const da = getDur(a), db = getDur(b);
+    if (da !== db) return db - da;
+    return b[0].localeCompare(a[0]);
+  })[0];
+
+  // משמרות בודדות = כל השאר, ממוינות לפי שעת התחלה
+  const base = allEntries
+    .filter(([k]) => k !== doubleEntry[0])
+    .sort(([, a], [, b]) => (a.start || '99:99').localeCompare(b.start || '99:99'));
+
+  if (empDeptEmpCount <= 2) {
+    if (base.length <= 2) return base.map(([k]) => k);
+    return [base[0][0], base[base.length - 1][0]];
+  }
+  if (base.length <= 3) return base.map(([k]) => k);
+  const mid = Math.floor(base.length / 2);
+  return [base[0][0], base[mid][0], base[base.length - 1][0]];
+}
 
 function changeWeek(delta) {
   currentWeekOffset += delta;
+  loadConstraintDays();
+}
+
+async function loadConstraintDays() {
+  const weekKey = getWeekKey(currentWeekOffset);
+
+  // טעינת האילוצים של העובד + כל הקולגות במקביל
+  const allKeys = [empUsername, ...deptColleagueKeys];
+  const snaps = await Promise.all(
+    allKeys.map(k => db.ref(`branches/${empBranchKey}/constraints/${weekKey}/${k}`).once('value'))
+  );
+
+  savedConstraints = snaps[0].val() || {};
+  deptColleagueConstraints = {};
+  deptColleagueKeys.forEach((k, i) => {
+    deptColleagueConstraints[k] = snaps[i + 1].val() || {};
+  });
+
   renderConstraintDays();
 }
 
-async function renderConstraintDays() {
-  const weekKey = getWeekKey(currentWeekOffset);
+function _colleagueHasAbsenceOnDay(dayKey) {
+  const absenceVals = _getAbsenceValues();
+  return deptColleagueKeys.some(k => {
+    const c1 = (deptColleagueConstraints[k]?.[dayKey] || {}).c1;
+    return c1 && absenceVals.has(c1);
+  });
+}
+
+function renderConstraintDays() {
   document.getElementById('constraint-week-label').textContent = formatWeekLabel(currentWeekOffset);
 
-  // Load existing constraints for this week
-  const snap = await db.ref(`branches/${empBranchKey}/constraints/${weekKey}/${empUsername}`).once('value');
-  savedConstraints = snap.val() || {};
+  const container   = document.getElementById('constraint-days-container');
+  const workDays    = parseInt(branchSettings.workDays) || 6;
+  const maxAbsences = parseInt(branchSettings.constraintsPerWeek) || 2;
+  const dayNames    = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+  const absenceVals = _getAbsenceValues();
 
-  const container = document.getElementById('constraint-days-container');
-  const workDays  = parseInt(branchSettings.workDays) || 6;
-  const dayNames  = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
-  const ctOptions = Object.values(branchConstraintTypes);
-
-  const optionsHTML = `<option value="">-- אין --</option>` +
-    ctOptions.map(ct => `<option value="${ct.value}">${ct.label}</option>`).join('');
-
-  let html = '';
+  let usedAbsences = 0;
   for (let i = 0; i < workDays; i++) {
-    const dayKey = `day_${i}`;
-    const saved  = savedConstraints[dayKey] || {};
+    const c1 = (savedConstraints[`day_${i}`] || {}).c1;
+    if (c1 && absenceVals.has(c1)) usedAbsences++;
+  }
+
+  const relevantShiftKeys = getRelevantShiftKeys();
+  const shifts = relevantShiftKeys.map(key => [key, branchShiftTypes[key]]).filter(([, v]) => v);
+  const absenceTypes = Object.values(branchConstraintTypes).filter(ct => ct.category === 'absence');
+
+  let html = `
+    <div style="background:#f0f3ff; border-radius:10px; padding:12px 16px; margin-bottom:16px; text-align:center;">
+      <div style="font-weight:bold; font-size:1.05em;">
+        בקשות היעדרות: <span id="used-absences">${usedAbsences}</span> / ${maxAbsences}
+      </div>
+      <div style="color:#888; font-size:0.85em; margin-top:4px;">בחירת משמרת מועדפת — ללא הגבלה</div>
+    </div>`;
+
+  for (let i = 0; i < workDays; i++) {
+    const dayKey    = `day_${i}`;
+    const daySaved  = savedConstraints[dayKey] || {};
+    const savedC1   = daySaved.c1 || '';
+    const savedStat = daySaved.status || '';
+
+    const colleagueBlocked = _colleagueHasAbsenceOnDay(dayKey);
+
+    const shiftBtns = shifts.map(([key, shift]) => {
+      const active = savedC1 === key;
+      return `<button onclick="selectDayPref('${dayKey}','${key}')"
+        style="padding:7px 14px; border-radius:7px; border:2px solid ${active ? '#667eea' : '#e2e8f0'};
+               background:${active ? '#667eea' : '#fff'}; color:${active ? '#fff' : '#4a5568'};
+               cursor:pointer; margin:3px; font-size:0.9em; font-weight:${active ? 'bold' : 'normal'};">
+        ${shift.name}
+      </button>`;
+    }).join('');
+
+    const absenceBtns = absenceTypes.map(ct => {
+      const active = savedC1 === ct.value;
+      // חסום: הגיע למגבלה שבועית, או קולגה כבר ביקש חופש ביום זה
+      const limitReached = !active && usedAbsences >= maxAbsences;
+      const blocked      = !active && colleagueBlocked;
+      const canSelect    = active || (!limitReached && !blocked);
+
+      let errorMsg = '';
+      if (limitReached) errorMsg = `❌ הגעת למגבלת ההיעדרויות השבועיות (${maxAbsences})`;
+      if (blocked)      errorMsg = '❌ עובד אחר מאותה מחלקה כבר ביקש חופש ביום זה';
+
+      let statusBadge = '';
+      if (active && savedStat) {
+        if (savedStat === 'approved')  statusBadge = ' ✅';
+        else if (savedStat === 'rejected') statusBadge = ' ❌';
+        else statusBadge = ' ⏳';
+      }
+
+      return `<button onclick="${canSelect
+          ? `selectDayPref('${dayKey}','${ct.value}')`
+          : `showMsg('constraints-msg','${errorMsg}','error')`}"
+        style="padding:7px 14px; border-radius:7px; border:2px solid ${active ? '#e53e3e' : '#e2e8f0'};
+               background:${active ? '#e53e3e' : blocked ? '#f7f7f7' : '#fff'};
+               color:${active ? '#fff' : '#4a5568'};
+               cursor:${canSelect ? 'pointer' : 'not-allowed'}; margin:3px; font-size:0.9em;
+               font-weight:${active ? 'bold' : 'normal'};
+               ${!canSelect && !active ? 'opacity:0.4;' : ''}">
+        ${ct.label}${statusBadge}
+      </button>`;
+    }).join('');
+
+    const clearBtn = savedC1
+      ? `<button onclick="selectDayPref('${dayKey}','')"
+           style="padding:5px 10px; border-radius:6px; border:1px solid #e2e8f0; background:#f7fafc;
+                  color:#999; cursor:pointer; margin:3px; font-size:0.82em;">✕ נקה</button>`
+      : '';
+
+    // הצג אזהרה אם קולגה כבר ביקש חופש ביום זה
+    const colleagueWarning = colleagueBlocked
+      ? `<div style="font-size:0.78em; color:#b7791f; margin-top:4px;">⚠️ קולגה ביקש חופש — היעדרות חסומה</div>`
+      : '';
+
     html += `
       <div class="card" style="margin-bottom:12px;">
         <div style="font-weight:bold; margin-bottom:10px; color:#667eea;">📅 יום ${dayNames[i]}</div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-          <div class="form-group" style="margin:0">
-            <label>אילוץ 1</label>
-            <select id="c1-${dayKey}">${optionsHTML}</select>
-          </div>
-          <div class="form-group" style="margin:0">
-            <label>אילוץ 2</label>
-            <select id="c2-${dayKey}">${optionsHTML}</select>
-          </div>
-        </div>
-      </div>
-    `;
+        <div style="font-size:0.82em; color:#888; margin-bottom:6px;">משמרת מועדפת:</div>
+        <div>${shiftBtns}${clearBtn}</div>
+        ${absenceTypes.length > 0 ? `
+          <div style="margin-top:10px; padding-top:10px; border-top:1px solid #eee;">
+            <div style="font-size:0.82em; color:#888; margin-bottom:6px;">היעדרות:</div>
+            <div>${absenceBtns}</div>
+            ${colleagueWarning}
+          </div>` : ''}
+      </div>`;
   }
-  container.innerHTML = html;
 
-  // Restore saved values
-  for (let i = 0; i < workDays; i++) {
-    const dayKey = `day_${i}`;
-    const saved  = savedConstraints[dayKey] || {};
-    const c1 = document.getElementById(`c1-${dayKey}`);
-    const c2 = document.getElementById(`c2-${dayKey}`);
-    if (c1 && saved.c1) c1.value = saved.c1;
-    if (c2 && saved.c2) c2.value = saved.c2;
+  container.innerHTML = html;
+}
+
+function selectDayPref(dayKey, val) {
+  const absenceVals    = _getAbsenceValues();
+  const maxAbsences    = parseInt(branchSettings.constraintsPerWeek) || 2;
+  const workDays       = parseInt(branchSettings.workDays) || 6;
+  const prev           = savedConstraints[dayKey] || {};
+  const prevVal        = prev.c1 || '';
+  const prevWasAbsence = prevVal && absenceVals.has(prevVal);
+  const newIsAbsence   = val && absenceVals.has(val);
+
+  if (newIsAbsence) {
+    // בדיקת מגבלת היעדרויות שבועית
+    if (!prevWasAbsence) {
+      let count = 0;
+      for (let i = 0; i < workDays; i++) {
+        const c1 = (savedConstraints[`day_${i}`] || {}).c1;
+        if (c1 && absenceVals.has(c1)) count++;
+      }
+      if (count >= maxAbsences) {
+        showMsg('constraints-msg', `❌ הגעת למגבלת ההיעדרויות השבועיות (${maxAbsences})`, 'error');
+        return;
+      }
+    }
+
+    // בדיקת התנגשות עם קולגות
+    if (_colleagueHasAbsenceOnDay(dayKey)) {
+      showMsg('constraints-msg', '❌ עובד אחר מאותה מחלקה כבר ביקש חופש ביום זה', 'error');
+      return;
+    }
   }
+
+  if (!val) {
+    delete savedConstraints[dayKey];
+  } else if (newIsAbsence) {
+    const keepApproved = prevVal === val && prev.status === 'approved';
+    savedConstraints[dayKey] = { c1: val, status: keepApproved ? 'approved' : 'pending' };
+  } else {
+    savedConstraints[dayKey] = { c1: val };
+  }
+  renderConstraintDays();
 }
 
 async function saveConstraints() {
-  const weekKey  = getWeekKey(currentWeekOffset);
-  const workDays = parseInt(branchSettings.workDays) || 6;
-  const data     = {};
-
-  for (let i = 0; i < workDays; i++) {
-    const dayKey = `day_${i}`;
-    const c1 = document.getElementById(`c1-${dayKey}`)?.value || '';
-    const c2 = document.getElementById(`c2-${dayKey}`)?.value || '';
-    if (c1 || c2) data[dayKey] = { c1, c2, savedAt: Date.now() };
-  }
-
+  const weekKey = getWeekKey(currentWeekOffset);
   try {
-    await db.ref(`branches/${empBranchKey}/constraints/${weekKey}/${empUsername}`).set(data);
-    showMsg('constraints-msg', '✅ האילוצים נשמרו בהצלחה', 'success');
+    await db.ref(`branches/${empBranchKey}/constraints/${weekKey}/${empUsername}`).set(savedConstraints);
+    showMsg('constraints-msg', '✅ ההעדפות נשמרו בהצלחה', 'success');
   } catch (e) {
     showMsg('constraints-msg', '❌ שגיאה בשמירה: ' + e.message, 'error');
   }
@@ -184,27 +361,26 @@ async function renderMySchedule() {
 
   let html = '';
   for (let i = 0; i < workDays; i++) {
-    const dayKey   = `day_${i}`;
-    const dayData  = schedule[dayKey] || {};
-    const myShift  = dayData[empUsername] || null;
+    const dayKey  = `day_${i}`;
+    const dayData = schedule[dayKey] || {};
+    const myShift = dayData[empUsername] || null;
 
     if (myShift) {
-      const st = shifts[myShift] || { name: myShift };
+      const shiftChips = String(myShift).split('|').map(sk => {
+        const st = shifts[sk] || { name: sk };
+        return `<span class="shift-chip shift-color-0">${st.name}${st.start ? ` ${st.start}–${st.end}` : ''}</span>`;
+      }).join(' ');
       html += `
         <div class="card" style="margin-bottom:10px;">
           <strong>📅 יום ${dayNames[i]}</strong>
-          <div style="margin-top:8px">
-            <span class="shift-chip shift-color-0">${st.name}${st.start ? ` ${st.start}–${st.end}` : ''}</span>
-          </div>
-        </div>
-      `;
+          <div style="margin-top:8px">${shiftChips}</div>
+        </div>`;
     } else {
       html += `
         <div class="card" style="margin-bottom:10px; background:#fafafa;">
           <strong>📅 יום ${dayNames[i]}</strong>
           <div style="margin-top:8px; color:#aaa;">יום חופש 🏖️</div>
-        </div>
-      `;
+        </div>`;
     }
   }
 
