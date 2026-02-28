@@ -2,9 +2,6 @@
 // manager.js — פורטל מנהל
 // ===========================================
 
-// ⚠️ הכנס את ה-Server Key מ: Firebase Console → Project Settings → Cloud Messaging → Server key
-const FCM_SERVER_KEY = 'SERVER_KEY_FROM_FIREBASE_CONSOLE';
-
 let mgrBranchKey = null;
 let orgData      = {};
 let mgrSettings  = {};
@@ -385,47 +382,18 @@ async function deleteMgrConstraint() {
 // CONSTRAINT REMINDER PUSH NOTIFICATION
 // ===========================================
 async function sendConstraintReminder() {
-  // שמור ב-Firebase — עובדים עם אפליקציה פתוחה יקבלו תזכורת מיידית
-  const sentAt = Date.now();
-  await db.ref(`branches/${mgrBranchKey}/lastConstraintReminder`).set({ sentAt });
+  showMsg('schedule-msg', '⏳ שולח תזכורת...', 'info');
 
-  // נסה לשלוח FCM push לעובדים עם אפליקציה סגורה
+  // כתיבה ל-Firebase מפעילה את ה-Cloud Function שמשלח push לכל עובדי הסניף
   const tokensSnap = await db.ref(`branches/${mgrBranchKey}/fcmTokens`).once('value');
-  const tokensObj  = tokensSnap.val() || {};
-  const tokens     = Object.values(tokensObj).filter(Boolean);
+  const tokenCount = Object.keys(tokensSnap.val() || {}).length;
 
-  if (tokens.length > 0 && FCM_SERVER_KEY !== 'SERVER_KEY_FROM_FIREBASE_CONSOLE') {
-    try {
-      const res = await fetch('https://fcm.googleapis.com/fcm/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'key=' + FCM_SERVER_KEY
-        },
-        body: JSON.stringify({
-          registration_ids: tokens,
-          notification: {
-            title: '🔔 תזכורת — ShiftSaaS',
-            body:  'הזמן להזין את האילוצים שלך לשבוע הבא',
-            icon:  '/icon-192.png'
-          }
-        })
-      });
-      const result = await res.json();
-      const sent = result.success || 0;
-      showMsg('constraints-msg' in document.getElementById('constraints-container') ? 'constraints-container' : 'schedule-msg',
-        `✅ תזכורת נשלחה (${sent} עובדים קיבלו push)`, 'success');
-      return;
-    } catch (e) {
-      console.warn('FCM send failed:', e);
-    }
-  }
+  await db.ref(`branches/${mgrBranchKey}/lastConstraintReminder`).set({ sentAt: Date.now() });
 
-  // fallback — תזכורת בתוך האפליקציה בלבד
-  const inApp = tokens.length === 0
-    ? 'אין עובדים רשומים לpush — תזכורת בתוך האפליקציה נשלחה'
-    : `✅ תזכורת נשלחה ל-${tokens.length} עובדים`;
-  showMsg('schedule-msg', inApp, 'success');
+  const msg = tokenCount > 0
+    ? `✅ תזכורת נשלחה ל-${tokenCount} עובדים`
+    : '✅ תזכורת נשלחה (עובדים יראו אותה בפתיחת האפליקציה)';
+  showMsg('schedule-msg', msg, 'success');
 }
 
 async function approveAbsence(empKey, dayKey) {
