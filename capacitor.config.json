@@ -1,0 +1,8 @@
+{
+  "appId": "com.shiftsaas.app",
+  "appName": "ShiftSaaS",
+  "webDir": "www",
+  "server": {
+    "url": "https://shift-saas.web.app"
+  }
+}
