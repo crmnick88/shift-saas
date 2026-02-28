@@ -1,4 +1,38 @@
-const CACHE_NAME = 'shift-saas-v2';
+// ===========================================
+// service-worker.js — ShiftSaaS
+// ===========================================
+
+// ── FCM Background Messaging (must be at top) ──
+importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js');
+
+firebase.initializeApp({
+  apiKey:            "AIzaSyDQ101ga04UwKYUALbNOJy8LeeF7EFEOIs",
+  authDomain:        "shift-saas.firebaseapp.com",
+  databaseURL:       "https://shift-saas-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId:         "shift-saas",
+  storageBucket:     "shift-saas.firebasestorage.app",
+  messagingSenderId: "957350830489",
+  appId:             "1:957350830489:web:fe458f5333fa93c5ce7308"
+});
+
+const messaging = firebase.messaging();
+
+// הודעת פוש כשהאפליקציה סגורה
+messaging.onBackgroundMessage(payload => {
+  const title = payload.notification?.title || 'ShiftSaaS';
+  const body  = payload.notification?.body  || '';
+  self.registration.showNotification(title, {
+    body,
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    dir: 'rtl',
+    lang: 'he'
+  });
+});
+
+// ── Cache Management ────────────────────────
+const CACHE_NAME = 'shift-saas-v3';
 const CACHE_URLS = [
   './',
   './index.html',

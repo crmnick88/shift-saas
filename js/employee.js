@@ -2,6 +2,9 @@
 // employee.js — ממשק עובד
 // ===========================================
 
+// ⚠️ הכנס את ה-VAPID Key מ: Firebase Console → Project Settings → Cloud Messaging → Web Push certificates
+const VAPID_KEY = 'VAPID_KEY_FROM_FIREBASE_CONSOLE';
+
 let empBranchKey = localStorage.getItem('empBranchKey');
 let empUsername  = localStorage.getItem('empUsername');
 let empDisplayName = localStorage.getItem('empDisplayName') || empUsername;
@@ -58,10 +61,57 @@ window.addEventListener('load', async () => {
     showScreen('screen-main');
     loadConstraintDays();
     renderMySchedule();
+    setupReminderListener();
+    subscribeToPush();
   } catch (e) {
     alert('שגיאה בטעינה: ' + e.message);
   }
 });
+
+// ===========================================
+// PUSH NOTIFICATIONS
+// ===========================================
+
+// האזנה ל-Firebase בזמן אמת — מציג באנר אם המנהל שלח תזכורת
+function setupReminderListener() {
+  db.ref(`branches/${empBranchKey}/lastConstraintReminder`).on('value', snap => {
+    const data = snap.val();
+    if (!data || !data.sentAt) return;
+    const lastSeen = parseInt(localStorage.getItem('lastSeenReminder') || '0');
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    if (data.sentAt > lastSeen && data.sentAt > sevenDaysAgo) {
+      document.getElementById('reminder-banner').style.display = 'block';
+      localStorage.setItem('lastSeenReminder', String(data.sentAt));
+    }
+  });
+}
+
+// רישום ל-FCM לקבלת הודעות פוש לטלפון (גם כשהאפליקציה סגורה)
+async function subscribeToPush() {
+  try {
+    if (!('Notification' in window) || !('serviceWorker' in navigator)) return;
+    if (VAPID_KEY === 'VAPID_KEY_FROM_FIREBASE_CONSOLE') return; // טרם הוגדר
+
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return;
+
+    const swReg = await navigator.serviceWorker.ready;
+    const messaging = firebase.messaging();
+    const token = await messaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
+
+    if (token) {
+      await db.ref(`branches/${empBranchKey}/fcmTokens/${empUsername}`).set(token);
+    }
+
+    // הצגת התראה בחלון גם כשהאפליקציה פתוחה
+    messaging.onMessage(payload => {
+      const banner = document.getElementById('reminder-banner');
+      if (banner) banner.style.display = 'block';
+    });
+  } catch (e) {
+    console.warn('Push subscription failed:', e);
+  }
+}
 
 function showScreen(id) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
