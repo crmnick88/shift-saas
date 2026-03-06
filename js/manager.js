@@ -629,7 +629,41 @@ function exportToExcel() {
   XLSX.utils.book_append_sheet(wb, ws, 'סידור');
 
   const weekLabel = formatWeekLabel(currentWeekOffset).replace(' — ', '_').replace(/\//g, '-');
-  XLSX.writeFile(wb, `סידור_${weekLabel}.xlsx`);
+  const fileName = `סידור_${weekLabel}.xlsx`;
+
+  let array, blob, fileObj;
+  try {
+    array = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    blob = new Blob([array], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    fileObj = new File([blob], fileName, { type: blob.type });
+  } catch (e) {
+    return showMsg('schedule-msg', 'שגיאה ביצירת הקובץ: ' + e.message, 'error');
+  }
+
+  // Web Share API — works on Android Chrome & iOS Safari (file sharing)
+  if (navigator.canShare && navigator.canShare({ files: [fileObj] })) {
+    navigator.share({ files: [fileObj], title: 'סידור עבודה' })
+      .catch(err => {
+        if (err.name === 'AbortError') return; // user cancelled — that's fine
+        // share failed — fall back to anchor download
+        _downloadBlob(blob, fileName);
+      });
+    return;
+  }
+
+  // Fallback: anchor download (desktop browsers, older Android)
+  _downloadBlob(blob, fileName);
+}
+
+function _downloadBlob(blob, fileName) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
 // ===========================================
