@@ -1,0 +1,25 @@
+{
+  "name": "shift-saas",
+  "version": "1.0.0",
+  "description": "1. לך ל-https://console.firebase.google.com\r 2. לחץ \"Add Project\" → תן שם → צור\r 3. הפעל **Authentication** → Email/Password + Anonymous\r 4. הפעל **Realtime Database** → תבחר אזור → התחל במצב \"test mode\" בינתיים",
+  "main": "service-worker.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crmnick88/shift-saas.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/crmnick88/shift-saas/issues"
+  },
+  "homepage": "https://github.com/crmnick88/shift-saas#readme",
+  "dependencies": {
+    "@capacitor/android": "^8.1.0",
+    "@capacitor/cli": "^8.1.0",
+    "@capacitor/core": "^8.1.0"
+  }
+}
