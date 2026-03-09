@@ -32,7 +32,7 @@ messaging.onBackgroundMessage(payload => {
 });
 
 // ── Cache Management ────────────────────────
-const CACHE_NAME = 'shift-saas-v3';
+const CACHE_NAME = 'shift-saas-v4';
 const CACHE_URLS = [
   './',
   './index.html',
@@ -47,7 +47,9 @@ const CACHE_URLS = [
   './js/manager.js',
   './js/employee.js',
   './js/scheduler.js',
-  './js/staffing.js'
+  './js/staffing.js',
+  './push-settings.html',
+  './js/push-settings.js'
 ];
 
 self.addEventListener('install', e => {

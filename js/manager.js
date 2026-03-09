@@ -45,6 +45,7 @@ showScreen('screen-main');
 renderWeekLabels();
 renderEmployeeList();
 renderBranchInfo();
+subscribeMgrToPush();
 });
 
 function checkTrial() {
@@ -90,7 +91,8 @@ function formatWeekLabel(offset = 0) {
   start.setDate(start.getDate() - start.getDay() + offset * 7);
   const end = new Date(start);
   end.setDate(end.getDate() + 6);
-  return `${start.toLocaleDateString('he-IL')} — ${end.toLocaleDateString('he-IL')}`;
+  const fmt = d => d.getDate() + '/' + (d.getMonth() + 1);
+  return fmt(start) + ' – ' + fmt(end);
 }
 
 function renderWeekLabels() {
@@ -198,7 +200,8 @@ function renderScheduleTable(schedule) {
           const chips = String(shiftVal).split('|').map(sk => {
             const st  = shiftTypes[sk] || { name: sk };
             const idx = Object.keys(shiftTypes).indexOf(sk);
-            return `<span class="shift-chip shift-color-${idx % 6}">${st.name}</span>`;
+            const hours = (st.start && st.end) ? `<br><small style="font-size:0.75em;opacity:0.8;">${st.start}–${st.end}</small>` : '';
+            return `<span class="shift-chip shift-color-${idx % 6}">${st.name}${hours}</span>`;
           }).join(' ');
           html += `<td>${chips}</td>`;
         } else {
@@ -396,6 +399,16 @@ async function sendConstraintReminder() {
   showMsg('schedule-msg', msg, 'success');
 }
 
+async function resetAllConstraints() {
+  const weekLabel = formatWeekLabel(currentWeekOffsetConstraints);
+  if (!confirm(`למחוק את כל האילוצים של כל העובדים לשבוע ${weekLabel}?\n\nפעולה זו אינה ניתנת לביטול.`)) return;
+
+  const weekKey = getWeekKey(currentWeekOffsetConstraints);
+  await db.ref(`branches/${mgrBranchKey}/constraints/${weekKey}`).remove();
+  showMsg('mc-msg', '🗑️ כל האילוצים לשבוע זה נמחקו', 'info');
+  loadConstraints();
+}
+
 async function approveAbsence(empKey, dayKey) {
   const weekKey = getWeekKey(currentWeekOffsetConstraints);
   await db.ref(`branches/${mgrBranchKey}/constraints/${weekKey}/${empKey}/${dayKey}/status`).set('approved');
@@ -517,7 +530,7 @@ async function renderBranchInfo() {
 // ===========================================
 // EXCEL EXPORT
 // ===========================================
-function exportToExcel() {
+async function exportToExcel() {
   if (!currentScheduleData || Object.keys(currentScheduleData).length === 0)
     return showMsg('schedule-msg', 'אין סידור לייצוא', 'error');
 
@@ -589,7 +602,7 @@ function exportToExcel() {
         if (shiftVal) {
           // May be "shift_A|shift_B" for double
           const parts = String(shiftVal).split('|');
-          const names = parts.map(sk => shiftTypes[sk]?.name || sk).join(' + ');
+          const names = parts.map(sk => { const st = shiftTypes[sk]; const h = (st && st.start && st.end) ? ('\n' + st.start + '-' + st.end) : ''; return (st ? st.name : sk) + h; }).join(' + ');
           // Use color of first shift
           const idx   = shiftKeys.indexOf(parts[0]);
           const col   = SHIFT_COLORS[idx >= 0 ? idx % 6 : 0];
@@ -631,39 +644,122 @@ function exportToExcel() {
   const weekLabel = formatWeekLabel(currentWeekOffset).replace(' — ', '_').replace(/\//g, '-');
   const fileName = `סידור_${weekLabel}.xlsx`;
 
-  let array, blob, fileObj;
+  let array, blob;
   try {
     array = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     blob = new Blob([array], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    fileObj = new File([blob], fileName, { type: blob.type });
   } catch (e) {
     return showMsg('schedule-msg', 'שגיאה ביצירת הקובץ: ' + e.message, 'error');
   }
 
+  // Capacitor native share (APK): write file to cache then open Android share sheet.
+  if (await _shareExcelWithCapacitor(blob, fileName)) return;
+
   // Web Share API — works on Android Chrome & iOS Safari (file sharing)
-  if (navigator.canShare && navigator.canShare({ files: [fileObj] })) {
-    navigator.share({ files: [fileObj], title: 'סידור עבודה' })
-      .catch(err => {
-        if (err.name === 'AbortError') return; // user cancelled — that's fine
-        // share failed — fall back to anchor download
-        _downloadBlob(blob, fileName);
-      });
-    return;
+  if (window.File && navigator.canShare && navigator.share) {
+    try {
+      const fileObj = new File([blob], fileName, { type: blob.type });
+      if (navigator.canShare({ files: [fileObj] })) {
+        await navigator.share({ files: [fileObj], title: 'סידור עבודה' });
+        return;
+      }
+    } catch (err) {
+      if (err?.name !== 'AbortError') {
+        console.warn('Web Share failed, falling back to download:', err);
+      } else {
+        return;
+      }
+    }
   }
 
-  // Fallback: anchor download (desktop browsers, older Android)
-  _downloadBlob(blob, fileName);
+  // Fallback: anchor download (desktop browsers)
+  const downloadOk = _downloadBlob(blob, fileName);
+  if (!downloadOk && _isNativeCapacitor()) {
+    showMsg(
+      'schedule-msg',
+      'הייצוא הנייטיבי לא זמין באפליקציה. התקן את @capacitor/filesystem ו-@capacitor/share ואז בצע npx cap sync android',
+      'error'
+    );
+  }
 }
 
 function _downloadBlob(blob, fileName) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  try {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    return true;
+  } catch (e) {
+    console.warn('Download fallback failed:', e);
+    return false;
+  }
+}
+
+function _isNativeCapacitor() {
+  const cap = window.Capacitor;
+  if (!cap) return false;
+  if (typeof cap.isNativePlatform === 'function') return cap.isNativePlatform();
+  if (typeof cap.getPlatform === 'function') return cap.getPlatform() !== 'web';
+  return false;
+}
+
+function _safeFileName(name) {
+  return String(name || 'schedule.xlsx')
+    .replace(/[^\w.\-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'schedule.xlsx';
+}
+
+function _blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = String(reader.result || '');
+      const base64 = result.includes(',') ? result.split(',')[1] : result;
+      if (!base64) return reject(new Error('Failed to encode file'));
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function _shareExcelWithCapacitor(blob, fileName) {
+  if (!_isNativeCapacitor()) return false;
+
+  try {
+    const plugins = window.Capacitor?.Plugins || {};
+    const Filesystem = plugins.Filesystem;
+    const Share = plugins.Share;
+    if (!Filesystem || !Share) return false;
+
+    const safeName = _safeFileName(fileName);
+    const base64 = await _blobToBase64(blob);
+    const saved = await Filesystem.writeFile({
+      path: `exports/${Date.now()}_${safeName}`,
+      data: base64,
+      directory: 'CACHE',
+      recursive: true,
+    });
+
+    await Share.share({
+      title: 'סידור עבודה',
+      text: 'קובץ אקסל של סידור העבודה',
+      url: saved.uri,
+      dialogTitle: 'ייצוא סידור',
+    });
+    return true;
+  } catch (e) {
+    // אם המשתמש ביטל את חלונית השיתוף, מבחינתנו הפעולה הושלמה.
+    if (String(e?.message || '').toLowerCase().includes('cancel')) return true;
+    console.warn('Capacitor export/share failed:', e);
+    return false;
+  }
 }
 
 // ===========================================
@@ -684,3 +780,58 @@ function logout() {
 
 // Load schedule on init
 loadExistingSchedule();
+
+// ===========================================
+// PUSH — רישום מנהל לקבלת התראות
+// ===========================================
+async function subscribeMgrToPush() {
+  try {
+    const cap = window.Capacitor;
+    const isNative = cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform();
+    const pushPlugin = isNative && cap.Plugins && cap.Plugins.PushNotifications;
+    if (!isNative || !pushPlugin) return;
+
+    const result = await pushPlugin.requestPermissions();
+    if (result.receive !== 'granted') return;
+
+    // יצירת notification channel (דרוש Android 8+)
+    await pushPlugin.createChannel({
+      id: 'default',
+      name: 'ShiftSaaS',
+      importance: 5,
+      sound: 'default',
+      vibration: true,
+      visibility: 1,
+    });
+
+    await pushPlugin.register();
+
+    pushPlugin.addListener('registration', async (token) => {
+      if (token && token.value && mgrBranchKey) {
+        await db.ref('branches/' + mgrBranchKey + '/fcmTokens/manager').set(token.value);
+      }
+    });
+
+    pushPlugin.addListener('pushNotificationReceived', async (notification) => {
+      try {
+        const localPlugin = cap.Plugins && cap.Plugins.LocalNotifications;
+        if (localPlugin) {
+          await localPlugin.schedule({
+            notifications: [{
+              id: Date.now() % 2147483647,
+              title: notification.title || 'ShiftSaaS',
+              body:  notification.body  || '',
+              channelId: 'default',
+              sound: 'default',
+            }],
+          });
+        }
+      } catch (e) {
+        console.warn('[Push] local notification failed:', e);
+      }
+    });
+  } catch (e) {
+    console.warn('[Push] manager subscription failed:', e);
+  }
+}
+

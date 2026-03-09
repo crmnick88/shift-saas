@@ -89,27 +89,79 @@ function setupReminderListener() {
 // רישום ל-FCM לקבלת הודעות פוש לטלפון (גם כשהאפליקציה סגורה)
 async function subscribeToPush() {
   try {
-    if (!('Notification' in window) || !('serviceWorker' in navigator)) return;
-    if (VAPID_KEY === 'VAPID_KEY_FROM_FIREBASE_CONSOLE') return; // טרם הוגדר
+    const cap = window.Capacitor;
+    const isNative = cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform();
+    const pushPlugin = isNative && cap.Plugins && cap.Plugins.PushNotifications;
 
-    const permission = await Notification.requestPermission();
-    if (permission !== 'granted') return;
+    if (isNative && pushPlugin) {
+      // --- נייטיב אנדרואיד: שימוש בפלאגין Capacitor ---
+      const result = await pushPlugin.requestPermissions();
+      if (result.receive !== 'granted') return;
 
-    const swReg = await navigator.serviceWorker.ready;
-    const messaging = firebase.messaging();
-    const token = await messaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
+      // יצירת notification channel (דרוש Android 8+)
+      await pushPlugin.createChannel({
+        id: 'default',
+        name: 'ShiftSaaS',
+        importance: 5,
+        sound: 'default',
+        vibration: true,
+        visibility: 1,
+      });
 
-    if (token) {
-      await db.ref(`branches/${empBranchKey}/fcmTokens/${empUsername}`).set(token);
+      await pushPlugin.register();
+
+      pushPlugin.addListener('registration', async (token) => {
+        if (token && token.value) {
+          await db.ref('branches/' + empBranchKey + '/fcmTokens/' + empUsername).set(token.value);
+        }
+      });
+
+      pushPlugin.addListener('registrationError', (err) => {
+        console.error('[Push] registration error:', err);
+      });
+
+      pushPlugin.addListener('pushNotificationReceived', async (notification) => {
+        try {
+          const localPlugin = cap.Plugins && cap.Plugins.LocalNotifications;
+          if (localPlugin) {
+            await localPlugin.schedule({
+              notifications: [{
+                id: Date.now() % 2147483647,
+                title: notification.title || 'ShiftSaaS',
+                body:  notification.body  || '',
+                channelId: 'default',
+                sound: 'default',
+              }],
+            });
+          }
+        } catch (e) {
+          console.warn('[Push] local notification failed:', e);
+        }
+      });
+
+    } else {
+      // --- דפדפן: שימוש ב-Firebase Web Messaging ---
+      if (!('Notification' in window) || !('serviceWorker' in navigator)) return;
+      if (VAPID_KEY === 'VAPID_KEY_FROM_FIREBASE_CONSOLE') return;
+
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') return;
+
+      const swReg = await navigator.serviceWorker.ready;
+      const messaging = firebase.messaging();
+      const token = await messaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
+
+      if (token) {
+        await db.ref('branches/' + empBranchKey + '/fcmTokens/' + empUsername).set(token);
+      }
+
+      messaging.onMessage(payload => {
+        const banner = document.getElementById('reminder-banner');
+        if (banner) banner.style.display = 'block';
+      });
     }
-
-    // הצגת התראה בחלון גם כשהאפליקציה פתוחה
-    messaging.onMessage(payload => {
-      const banner = document.getElementById('reminder-banner');
-      if (banner) banner.style.display = 'block';
-    });
   } catch (e) {
-    console.warn('Push subscription failed:', e);
+    console.warn('[Push] subscription failed:', e);
   }
 }
 

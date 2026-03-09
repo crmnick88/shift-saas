@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, minimum-scale=0.3, maximum-scale=3.0">
   <title>פורטל מנהל — ShiftSaaS</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -44,12 +44,14 @@
     <!-- ===== SCHEDULE TAB ===== -->
     <div id="tab-schedule" class="tab-panel active">
       <div class="toolbar">
-        <button class="btn sm secondary" onclick="changeWeek(-1)">← שבוע קודם</button>
-        <span id="schedule-week-label" style="font-weight:bold; padding:8px 12px; background:#f0f3ff; border-radius:8px;"></span>
-        <button class="btn sm secondary" onclick="changeWeek(1)">שבוע הבא →</button>
-        <button class="btn sm" onclick="runAutoSchedule()">⚡ צור סידור אוטומטי</button>
-        <button class="btn sm success" onclick="publishSchedule()">📢 פרסם לעובדים</button>
-        <button class="btn sm secondary" onclick="exportToExcel()">📊 ייצוא לאקסל</button>
+        <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+          <button class="btn sm secondary" onclick="changeWeek(-1)">← קודם</button>
+          <span id="schedule-week-label" style="font-weight:bold; padding:6px 10px; background:#f0f3ff; border-radius:8px; font-size:13px; white-space:nowrap;"></span>
+          <button class="btn sm secondary" onclick="changeWeek(1)">הבא →</button>
+        </div>
+        <button class="btn sm" onclick="runAutoSchedule()">⚡ סידור אוטומטי</button>
+        <button class="btn sm success" onclick="publishSchedule()">📢 פרסם</button>
+        <button class="btn sm secondary" onclick="exportToExcel()">📊 אקסל</button>
       </div>
 
       <div id="schedule-container">
@@ -61,12 +63,15 @@
     <!-- ===== CONSTRAINTS TAB ===== -->
     <div id="tab-constraints" class="tab-panel">
       <div class="toolbar">
-        <button class="btn sm secondary" onclick="changeWeekConstraints(-1)">← שבוע קודם</button>
-        <span id="constraints-week-label" style="font-weight:bold; padding:8px 12px; background:#f0f3ff; border-radius:8px;"></span>
-        <button class="btn sm secondary" onclick="changeWeekConstraints(1)">שבוע הבא →</button>
+        <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+          <button class="btn sm secondary" onclick="changeWeekConstraints(-1)">← קודם</button>
+          <span id="constraints-week-label" style="font-weight:bold; padding:6px 10px; background:#f0f3ff; border-radius:8px; font-size:13px; white-space:nowrap;"></span>
+          <button class="btn sm secondary" onclick="changeWeekConstraints(1)">הבא →</button>
+        </div>
         <button class="btn sm" onclick="loadConstraints()">🔄 רענן</button>
-        <button class="btn sm success" onclick="toggleMgrConstraintForm()">✏️ הזן אילוץ ידנית</button>
-        <button class="btn sm" onclick="sendConstraintReminder()" style="background:#f6ad55; color:#fff;">🔔 שלח תזכורת לעובדים</button>
+        <button class="btn sm success" onclick="toggleMgrConstraintForm()">✏️ אילוץ ידני</button>
+        <button class="btn sm" onclick="sendConstraintReminder()" style="background:#f6ad55; color:#fff;">🔔 תזכורת</button>
+        <button class="btn sm danger" onclick="resetAllConstraints()">🗑️ איפוס</button>
       </div>
 
       <!-- Manager manual constraint form -->
@@ -147,7 +152,10 @@
         <h3>⚙️ הגדרות מערכת</h3>
         <a href="setup.html" class="btn secondary" style="display:inline-block; width:auto; text-decoration:none; padding:10px 20px;">🔧 ערוך הגדרות סניף</a>
       <a href="staffing.html" class="btn secondary" style="display:inline-block; width:auto; text-decoration:none; padding:10px 20px; margin-right:8px;">📊 דרישות שיבוץ</a>
+      <a href="push-settings.html" class="btn" style="display:inline-block; width:auto; text-decoration:none; padding:10px 20px; margin-right:8px; background:#f6ad55; color:#fff;">🔔 הגדרות התראות</a>
       </div>
+    </div>
+
     </div>
 
   </div><!-- /screen-main -->
@@ -162,5 +170,36 @@
 <script src="js/scheduler.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <script src="js/manager.js"></script>
+<script>
+(function() {
+  var scale = 1, startDist = 0, startScale = 1;
+  function dist(t) {
+    var dx = t[0].clientX - t[1].clientX, dy = t[0].clientY - t[1].clientY;
+    return Math.sqrt(dx*dx + dy*dy);
+  }
+  function setup() {
+    var el = document.getElementById("schedule-container");
+    if (!el || el._pinch) return;
+    el._pinch = true;
+    el.style.transformOrigin = "top right";
+    el.addEventListener("touchstart", function(e) {
+      if (e.touches.length === 2) { startDist = dist(e.touches); startScale = scale; }
+    }, {passive: true});
+    el.addEventListener("touchmove", function(e) {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        scale = Math.min(2, Math.max(0.25, startScale * dist(e.touches) / startDist));
+        el.style.transform = "scale(" + scale + ")";
+      }
+    }, {passive: false});
+  }
+  var obs = new MutationObserver(setup);
+  document.addEventListener("DOMContentLoaded", function() {
+    var c = document.getElementById("schedule-container");
+    if (c) obs.observe(c, {childList: true, subtree: false});
+    setup();
+  });
+})();
+</script>
 </body>
 </html>

@@ -244,6 +244,7 @@ textarea { resize: vertical; min-height: 80px; }
   gap: 0;
   margin-bottom: 30px;
   overflow-x: auto;
+  touch-action: pan-x pinch-zoom;
 }
 .step {
   display: flex;
@@ -330,9 +331,12 @@ textarea { resize: vertical; min-height: 80px; }
   border-bottom: 3px solid #e0e0e0;
   margin-bottom: 24px;
   overflow-x: auto;
+  touch-action: pan-x pinch-zoom;
 }
 .nav-tab {
-  padding: 12px 20px;
+  flex: 1;
+  text-align: center;
+  padding: 10px 8px;
   cursor: pointer;
   font-weight: bold;
   color: #888;
@@ -340,7 +344,7 @@ textarea { resize: vertical; min-height: 80px; }
   margin-bottom: -3px;
   white-space: nowrap;
   transition: all 0.2s;
-  font-size: 15px;
+  font-size: 14px;
 }
 .nav-tab:hover { color: #667eea; }
 .nav-tab.active { color: #667eea; border-bottom-color: #667eea; }
@@ -367,5 +371,5 @@ textarea { resize: vertical; min-height: 80px; }
   .mode-btn { font-size: 18px; padding: 20px 24px; }
   .schedule-table { font-size: 12px; }
   .schedule-table th, .schedule-table td { padding: 8px 4px; min-width: 60px; }
-  .nav-tab { padding: 10px 12px; font-size: 13px; }
+  .nav-tab { padding: 8px 4px; font-size: 12px; }
 }

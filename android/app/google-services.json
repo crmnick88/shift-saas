@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "957350830489",
+    "firebase_url": "https://shift-saas-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "shift-saas",
+    "storage_bucket": "shift-saas.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:957350830489:android:a58873340bf638e7ce7308",
+        "android_client_info": {
+          "package_name": "com.shiftsaas.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBk1PDDQyWlxqKayUwHjj6ofTt9bmICruY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
