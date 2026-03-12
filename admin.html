@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Super Admin — ShiftSaaS</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .stat-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 14px 10px;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+      border-top: 4px solid #4a6cf7;
+    }
+    .stat-card.green  { border-top-color: #22c55e; }
+    .stat-card.yellow { border-top-color: #f59e0b; }
+    .stat-card.red    { border-top-color: #ef4444; }
+    .stat-card.gray   { border-top-color: #94a3b8; }
+    .stat-card.indigo { border-top-color: #6366f1; }
+    .stat-card .num   { font-size: 1.9em; font-weight: 700; color: #1e293b; }
+    .stat-card .lbl   { font-size: 11px; color: #888; margin-top: 4px; }
+
+    .filter-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+    .filter-btn { padding: 5px 12px; border-radius: 20px; border: 1.5px solid #e2e8f0;
+                  background: #fff; font-size: 12px; cursor: pointer; font-weight: 600; color: #475569; }
+    .filter-btn.active { background: #4a6cf7; color: #fff; border-color: #4a6cf7; }
+
+    .branches-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .branches-table th {
+      background: #f1f5f9; padding: 9px 8px; text-align: right;
+      font-weight: 600; border-bottom: 2px solid #e2e8f0; cursor: pointer; user-select: none;
+      white-space: nowrap;
+    }
+    .branches-table th:hover { background: #e8edf5; }
+    .branches-table th .sort-icon { margin-right: 4px; opacity: 0.4; font-size: 10px; }
+    .branches-table th.sorted .sort-icon { opacity: 1; }
+    .branches-table td { padding: 9px 8px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    .branches-table tr:hover td { background: #f8faff; }
+
+    .badge { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+    .badge.trial   { background: #fef3c7; color: #92400e; }
+    .badge.active  { background: #dcfce7; color: #166534; }
+    .badge.expired { background: #fee2e2; color: #991b1b; }
+    .badge.blocked { background: #f1f5f9; color: #64748b; }
+
+    .action-row { display: flex; gap: 4px; flex-wrap: wrap; }
+    .action-row .btn { padding: 4px 8px; font-size: 11px; margin: 0; }
+
+    #admin-search {
+      width: 100%; padding: 9px 14px; border: 1.5px solid #e2e8f0;
+      border-radius: 8px; font-size: 14px; margin-bottom: 10px; box-sizing: border-box;
+    }
+
+    /* Extend dropdown */
+    .extend-wrap { position: relative; display: inline-block; }
+    .extend-menu {
+      display: none; position: absolute; top: 100%; right: 0; z-index: 100;
+      background: #fff; border: 1.5px solid #e2e8f0; border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12); min-width: 110px; overflow: hidden;
+    }
+    .extend-menu.open { display: block; }
+    .extend-menu button {
+      display: block; width: 100%; padding: 8px 14px; text-align: right;
+      background: none; border: none; cursor: pointer; font-size: 13px; color: #1e293b;
+    }
+    .extend-menu button:hover { background: #f0f3ff; }
+
+    /* Note modal */
+    #note-modal {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+      z-index: 200; align-items: center; justify-content: center;
+    }
+    #note-modal.open { display: flex; }
+    #note-modal .modal-box {
+      background: #fff; border-radius: 14px; padding: 24px; width: 90%; max-width: 400px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+    }
+    #note-modal textarea {
+      width: 100%; min-height: 90px; border: 1.5px solid #e2e8f0;
+      border-radius: 8px; padding: 10px; font-size: 14px; resize: vertical;
+      box-sizing: border-box; margin-top: 10px; font-family: inherit;
+    }
+
+    .note-chip {
+      display: inline-block; background: #f0f3ff; color: #4a6cf7;
+      border-radius: 8px; padding: 2px 7px; font-size: 11px; margin-top: 3px;
+      max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+
+    /* Mobile: hide less-critical columns so table fits without horizontal scroll */
+    @media (max-width: 640px) {
+      /* hide: אימייל(2), כניסה אחרונה(4), נרשם(6), תוקף(7) */
+      .branches-table th:nth-child(2),
+      .branches-table td:nth-child(2),
+      .branches-table th:nth-child(4),
+      .branches-table td:nth-child(4),
+      .branches-table th:nth-child(6),
+      .branches-table td:nth-child(6),
+      .branches-table th:nth-child(7),
+      .branches-table td:nth-child(7) { display: none; }
+
+      .action-row { flex-direction: column; }
+      .action-row .btn { width: 100%; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <div id="screen-loading" class="section active" style="text-align:center; padding:60px 20px;">
+    <div style="font-size:50px;">🔒</div>
+    <p style="color:#888; margin-top:12px;">מאמת הרשאות...</p>
+  </div>
+
+  <div id="screen-denied" class="section" style="text-align:center; padding:60px 20px;">
+    <div style="font-size:60px;">⛔</div>
+    <h2 style="color:#ef4444; margin-top:16px;">אין גישה</h2>
+    <p style="color:#888;">דף זה מיועד למפתח בלבד.</p>
+    <button class="btn secondary" onclick="window.location.href='manager.html'">חזרה</button>
+  </div>
+
+  <div id="screen-main" class="section">
+    <!-- Header -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+      <div>
+        <h2 style="margin-bottom:2px;">🛠️ Super Admin</h2>
+        <div style="color:#888; font-size:13px;">פאנל ניהול מפתח — ShiftSaaS</div>
+      </div>
+      <button class="btn sm danger" onclick="window.location.href='manager.html'">חזרה</button>
+    </div>
+
+    <!-- Stats -->
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="num" id="stat-total">—</div>
+        <div class="lbl">סה"כ סניפים</div>
+      </div>
+      <div class="stat-card green">
+        <div class="num" id="stat-active">—</div>
+        <div class="lbl">פעילים (paid)</div>
+      </div>
+      <div class="stat-card yellow">
+        <div class="num" id="stat-trial">—</div>
+        <div class="lbl">בניסיון</div>
+      </div>
+      <div class="stat-card red">
+        <div class="num" id="stat-expired">—</div>
+        <div class="lbl">פג תוקף</div>
+      </div>
+      <div class="stat-card gray">
+        <div class="num" id="stat-blocked">—</div>
+        <div class="lbl">חסומים</div>
+      </div>
+      <div class="stat-card indigo">
+        <div class="num" id="stat-week">—</div>
+        <div class="lbl">נרשמו השבוע</div>
+      </div>
+      <div class="stat-card indigo">
+        <div class="num" id="stat-month">—</div>
+        <div class="lbl">נרשמו החודש</div>
+      </div>
+    </div>
+
+    <!-- Chart -->
+    <div style="background:#fff; border-radius:12px; padding:16px; box-shadow:0 2px 8px rgba(0,0,0,0.07); margin-bottom:16px;">
+      <div style="font-weight:600; font-size:13px; color:#475569; margin-bottom:10px;">📈 הרשמות לפי חודש (6 חודשים אחרונים)</div>
+      <canvas id="reg-chart" height="120"></canvas>
+    </div>
+
+    <!-- Toolbar -->
+    <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; align-items:center;">
+      <button class="btn sm" onclick="loadBranches()">🔄 רענן</button>
+      <button class="btn sm secondary" onclick="exportExcel()">📊 ייצוא אקסל</button>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="filter-bar">
+      <button class="filter-btn active" data-filter="all"     onclick="setFilter('all')">הכל</button>
+      <button class="filter-btn"        data-filter="trial"   onclick="setFilter('trial')">בניסיון</button>
+      <button class="filter-btn"        data-filter="active"  onclick="setFilter('active')">פעיל</button>
+      <button class="filter-btn"        data-filter="expired" onclick="setFilter('expired')">פג תוקף</button>
+      <button class="filter-btn"        data-filter="blocked" onclick="setFilter('blocked')">חסום</button>
+    </div>
+
+    <!-- Search -->
+    <input id="admin-search" type="text" placeholder="חפש לפי שם סניף, אימייל, UID..." oninput="applyFilters()">
+
+    <!-- Table -->
+    <div style="overflow-x:auto;">
+      <table class="branches-table" id="branches-table">
+        <thead>
+          <tr>
+            <th onclick="sortBy('displayName')"><span class="sort-icon" id="sort-icon-displayName">▼</span>סניף</th>
+            <th>אימייל</th>
+            <th onclick="sortBy('empCount')" style="text-align:center;"><span class="sort-icon" id="sort-icon-empCount">▼</span>עובדים</th>
+            <th onclick="sortBy('lastLogin')"><span class="sort-icon" id="sort-icon-lastLogin">▼</span>כניסה אחרונה</th>
+            <th onclick="sortBy('status')"><span class="sort-icon" id="sort-icon-status">▼</span>סטטוס</th>
+            <th onclick="sortBy('createdAt')"><span class="sort-icon" id="sort-icon-createdAt">▼</span>נרשם</th>
+            <th onclick="sortBy('trialEnds')"><span class="sort-icon" id="sort-icon-trialEnds">▼</span>תוקף</th>
+            <th>פעולות</th>
+          </tr>
+        </thead>
+        <tbody id="branches-tbody">
+          <tr><td colspan="8" style="text-align:center; color:#aaa; padding:30px;">טוען...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div id="admin-msg" class="message" style="display:none; margin-top:12px;"></div>
+  </div>
+
+</div>
+
+<!-- Note modal -->
+<div id="note-modal">
+  <div class="modal-box">
+    <h3 style="margin-bottom:4px;">📝 הערה פנימית</h3>
+    <div id="note-branch-name" style="color:#888; font-size:13px;"></div>
+    <textarea id="note-text" placeholder="הכנס הערה..."></textarea>
+    <div class="btn-row" style="margin-top:12px;">
+      <button class="btn success" onclick="saveNote()">💾 שמור</button>
+      <button class="btn secondary" onclick="closeNoteModal()">ביטול</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="js/firebase.js"></script>
+<script src="js/admin.js"></script>
+</body>
+</html>

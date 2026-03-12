@@ -77,6 +77,7 @@ function generateSchedule(orgData, constraints, settings) {
   }
 
   function isBlocked(empKey, dayKey) {
+    if ((empDayCount[empKey] || 0) >= maxDaysPerEmp) return true;
     return isAbsent(empKey, dayKey);
   }
 
@@ -90,6 +91,12 @@ function generateSchedule(orgData, constraints, settings) {
   // ===================================================
   const empShiftTypeCount = {};
   for (const empKey of Object.keys(employees)) empShiftTypeCount[empKey] = {};
+
+  // מגבלת ימי עבודה: עובד לא יעבוד יותר מ-(workDays-1) ימים בשבוע
+  // (מבטיח לפחות יום מנוחה אחד)
+  const maxDaysPerEmp = workDays >= 7 ? workDays - 1 : workDays;
+  const empDayCount   = {};
+  for (const empKey of Object.keys(employees)) empDayCount[empKey] = 0;
 
   // סה"כ משמרות לעובד (לצורך מיון כללי)
   function totalShiftCount(empKey) {
@@ -112,6 +119,23 @@ function generateSchedule(orgData, constraints, settings) {
 
   const staffingRules = settings.staffingRules || {};
   const weekKey       = settings.weekKey || null;
+
+  // מספר שבוע — לשימוש בסיבוב רשימת עובדים (rotation) לחלוקה הוגנת בין שבועות
+  const weekNumber = weekKey
+    ? Math.floor(new Date(weekKey + 'T12:00:00').getTime() / (7 * 24 * 60 * 60 * 1000))
+    : 0;
+
+  // סיבוב מערך עובדים לפי offset כדי לשנות סדר עדיפות מדי שבוע
+  function rotateArray(arr, offset) {
+    if (arr.length <= 1) return arr;
+    const n = ((offset % arr.length) + arr.length) % arr.length;
+    return [...arr.slice(n), ...arr.slice(0, n)];
+  }
+
+  // הפוך את רשימות העובדים לכל מחלקה — כך עובד אחר פותח כל שבוע
+  for (const deptKey of Object.keys(deptEmployees)) {
+    deptEmployees[deptKey] = rotateArray(deptEmployees[deptKey], weekNumber);
+  }
 
   function getScopeForDayIndex(dayIndex) {
     if (weekKey) {
@@ -278,6 +302,11 @@ function generateSchedule(orgData, constraints, settings) {
       if (empDept[empKey] === null && result[dayKey][empKey] === undefined) {
         result[dayKey][empKey] = null;
       }
+    }
+
+    // עדכון מונה ימי עבודה לכל עובד שקיבל משמרת היום
+    for (const empKey of Object.keys(employees)) {
+      if (result[dayKey][empKey]) empDayCount[empKey] = (empDayCount[empKey] || 0) + 1;
     }
   }
 

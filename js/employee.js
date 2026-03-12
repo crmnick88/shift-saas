@@ -22,6 +22,8 @@ let deptColleagueKeys   = []; // שמות משתמש של קולגות באות�
 
 // אילוצי קולגות לצורך בדיקת התנגשויות
 let deptColleagueConstraints = {}; // { empKey: { day_0: {...}, ... } }
+let deptColleagueNames       = {}; // { empKey: displayName }
+let colleagueListeners = []; // real-time listeners לניקוי בעת החלפת שבוע
 
 // ===========================================
 // INIT
@@ -53,6 +55,14 @@ window.addEventListener('load', async () => {
       const deptEmpsObj = deptSnap.val() || {};
       empDeptEmpCount   = Object.keys(deptEmpsObj).length;
       deptColleagueKeys = Object.keys(deptEmpsObj).filter(k => k !== empUsername);
+
+      // טעינת שמות הקולגות
+      const nameSnaps = await Promise.all(
+        deptColleagueKeys.map(k => db.ref(`branches/${empBranchKey}/org/employees/${k}/displayName`).once('value'))
+      );
+      deptColleagueKeys.forEach((k, i) => {
+        deptColleagueNames[k] = nameSnaps[i].val() || k;
+      });
     }
 
     document.getElementById('emp-welcome').textContent = `שלום ${empDisplayName}! 👋`;
@@ -176,7 +186,10 @@ function showScreen(id) {
 function getWeekKey(offset = 0) {
   const d = new Date();
   d.setDate(d.getDate() - d.getDay() + offset * 7);
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function formatWeekLabel(offset = 0) {
@@ -196,6 +209,7 @@ function switchTab(tabId) {
   document.getElementById(tabId).classList.add('active');
   const idx = ['tab-constraints','tab-schedule'].indexOf(tabId);
   document.querySelectorAll('.nav-tab')[idx].classList.add('active');
+  if (tabId === 'tab-schedule') requestAnimationFrame(scaleEmpScheduleTable);
 }
 
 // ===========================================
@@ -258,27 +272,42 @@ function changeWeek(delta) {
 async function loadConstraintDays() {
   const weekKey = getWeekKey(currentWeekOffset);
 
-  // טעינת האילוצים של העובד + כל הקולגות במקביל
-  const allKeys = [empUsername, ...deptColleagueKeys];
-  const snaps = await Promise.all(
-    allKeys.map(k => db.ref(`branches/${empBranchKey}/constraints/${weekKey}/${k}`).once('value'))
-  );
+  // ניקוי listeners ישנים
+  colleagueListeners.forEach(({ ref, handler }) => ref.off('value', handler));
+  colleagueListeners = [];
 
-  savedConstraints = snaps[0].val() || {};
+  // טעינת האילוצים של העובד עצמו
+  const mySnap = await db.ref(`branches/${empBranchKey}/constraints/${weekKey}/${empUsername}`).once('value');
+  savedConstraints = mySnap.val() || {};
   deptColleagueConstraints = {};
-  deptColleagueKeys.forEach((k, i) => {
-    deptColleagueConstraints[k] = snaps[i + 1].val() || {};
-  });
 
-  renderConstraintDays();
+  if (deptColleagueKeys.length === 0) {
+    renderConstraintDays();
+    return;
+  }
+
+  // הגדרת real-time listeners לקולגות — מתעדכן מיידית כשקולגה שומר
+  let initialLoads = deptColleagueKeys.length;
+  deptColleagueKeys.forEach(k => {
+    const ref = db.ref(`branches/${empBranchKey}/constraints/${weekKey}/${k}`);
+    const handler = snap => {
+      deptColleagueConstraints[k] = snap.val() || {};
+      if (initialLoads > 0) {
+        initialLoads--;
+        if (initialLoads === 0) renderConstraintDays();
+      } else {
+        renderConstraintDays(); // עדכון real-time
+      }
+    };
+    ref.on('value', handler);
+    colleagueListeners.push({ ref, handler });
+  });
 }
 
-function _colleagueHasAbsenceOnDay(dayKey) {
-  const absenceVals = _getAbsenceValues();
-  return deptColleagueKeys.some(k => {
-    const c1 = (deptColleagueConstraints[k]?.[dayKey] || {}).c1;
-    return c1 && absenceVals.has(c1);
-  });
+function _colleagueWhoTookConstraint(dayKey, val) {
+  if (!val) return null;
+  const key = deptColleagueKeys.find(k => (deptColleagueConstraints[k]?.[dayKey] || {}).c1 === val);
+  return key ? (deptColleagueNames[key] || key) : null;
 }
 
 function renderConstraintDays() {
@@ -290,10 +319,10 @@ function renderConstraintDays() {
   const dayNames    = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
   const absenceVals = _getAbsenceValues();
 
-  let usedAbsences = 0;
+  let usedConstraints = 0;
   for (let i = 0; i < workDays; i++) {
     const c1 = (savedConstraints[`day_${i}`] || {}).c1;
-    if (c1 && absenceVals.has(c1)) usedAbsences++;
+    if (c1) usedConstraints++;
   }
 
   const relevantShiftKeys = getRelevantShiftKeys();
@@ -303,9 +332,8 @@ function renderConstraintDays() {
   let html = `
     <div style="background:#f0f3ff; border-radius:10px; padding:12px 16px; margin-bottom:16px; text-align:center;">
       <div style="font-weight:bold; font-size:1.05em;">
-        בקשות היעדרות: <span id="used-absences">${usedAbsences}</span> / ${maxAbsences}
+        אילוצים שבחרת: <span id="used-absences">${usedConstraints}</span> / ${maxAbsences}
       </div>
-      <div style="color:#888; font-size:0.85em; margin-top:4px;">בחירת משמרת מועדפת — ללא הגבלה</div>
     </div>`;
 
   for (let i = 0; i < workDays; i++) {
@@ -314,28 +342,30 @@ function renderConstraintDays() {
     const savedC1   = daySaved.c1 || '';
     const savedStat = daySaved.status || '';
 
-    const colleagueBlocked = _colleagueHasAbsenceOnDay(dayKey);
-
     const shiftBtns = shifts.map(([key, shift]) => {
-      const active = savedC1 === key;
-      return `<button onclick="selectDayPref('${dayKey}','${key}')"
-        style="padding:7px 14px; border-radius:7px; border:2px solid ${active ? '#667eea' : '#e2e8f0'};
+      const active       = savedC1 === key;
+      const takenBy      = !active ? _colleagueWhoTookConstraint(dayKey, key) : null;
+      const limitReached = !active && !savedC1 && usedConstraints >= maxAbsences;
+      const canSelect    = active || (!takenBy && !limitReached);
+      let onclick = '';
+      if (canSelect) onclick = `selectDayPref('${dayKey}','${key}')`;
+      else if (takenBy) onclick = `showTakenByMsg(this)`;
+      else onclick = `showLimitMsg(${maxAbsences})`;
+      return `<button onclick="${onclick}" ${takenBy ? `data-taken-by="${takenBy}"` : ''}
+        style="padding:7px 14px; border-radius:7px; border:2px solid ${active ? '#667eea' : takenBy ? '#f6ad55' : '#e2e8f0'};
                background:${active ? '#667eea' : '#fff'}; color:${active ? '#fff' : '#4a5568'};
-               cursor:pointer; margin:3px; font-size:0.9em; font-weight:${active ? 'bold' : 'normal'};">
-        ${shift.name}
+               cursor:pointer; margin:3px; font-size:0.9em;
+               font-weight:${active ? 'bold' : 'normal'};
+               ${limitReached && !takenBy ? 'opacity:0.4;' : ''}">
+        ${shift.name}${takenBy ? `<br><span style="font-size:0.7em;color:#b7791f;">🔒 ${takenBy}</span>` : ''}
       </button>`;
     }).join('');
 
     const absenceBtns = absenceTypes.map(ct => {
-      const active = savedC1 === ct.value;
-      // חסום: הגיע למגבלה שבועית, או קולגה כבר ביקש חופש ביום זה
-      const limitReached = !active && usedAbsences >= maxAbsences;
-      const blocked      = !active && colleagueBlocked;
-      const canSelect    = active || (!limitReached && !blocked);
-
-      let errorMsg = '';
-      if (limitReached) errorMsg = `❌ הגעת למגבלת ההיעדרויות השבועיות (${maxAbsences})`;
-      if (blocked)      errorMsg = '❌ עובד אחר מאותה מחלקה כבר ביקש חופש ביום זה';
+      const active       = savedC1 === ct.value;
+      const takenBy      = !active ? _colleagueWhoTookConstraint(dayKey, ct.value) : null;
+      const limitReached = !active && !savedC1 && usedConstraints >= maxAbsences;
+      const canSelect    = active || (!takenBy && !limitReached);
 
       let statusBadge = '';
       if (active && savedStat) {
@@ -344,16 +374,19 @@ function renderConstraintDays() {
         else statusBadge = ' ⏳';
       }
 
-      return `<button onclick="${canSelect
-          ? `selectDayPref('${dayKey}','${ct.value}')`
-          : `showMsg('constraints-msg','${errorMsg}','error')`}"
-        style="padding:7px 14px; border-radius:7px; border:2px solid ${active ? '#e53e3e' : '#e2e8f0'};
-               background:${active ? '#e53e3e' : blocked ? '#f7f7f7' : '#fff'};
+      let onclick = '';
+      if (canSelect) onclick = `selectDayPref('${dayKey}','${ct.value}')`;
+      else if (takenBy) onclick = `showTakenByMsg(this)`;
+      else onclick = `showLimitMsg(${maxAbsences})`;
+
+      return `<button onclick="${onclick}" ${takenBy ? `data-taken-by="${takenBy}"` : ''}
+        style="padding:7px 14px; border-radius:7px; border:2px solid ${active ? '#e53e3e' : takenBy ? '#f6ad55' : '#e2e8f0'};
+               background:${active ? '#e53e3e' : '#fff'};
                color:${active ? '#fff' : '#4a5568'};
-               cursor:${canSelect ? 'pointer' : 'not-allowed'}; margin:3px; font-size:0.9em;
+               cursor:pointer; margin:3px; font-size:0.9em;
                font-weight:${active ? 'bold' : 'normal'};
-               ${!canSelect && !active ? 'opacity:0.4;' : ''}">
-        ${ct.label}${statusBadge}
+               ${limitReached && !takenBy ? 'opacity:0.4;' : ''}">
+        ${ct.label}${statusBadge}${takenBy ? `<br><span style="font-size:0.7em;color:#b7791f;">🔒 ${takenBy}</span>` : ''}
       </button>`;
     }).join('');
 
@@ -363,10 +396,7 @@ function renderConstraintDays() {
                   color:#999; cursor:pointer; margin:3px; font-size:0.82em;">✕ נקה</button>`
       : '';
 
-    // הצג אזהרה אם קולגה כבר ביקש חופש ביום זה
-    const colleagueWarning = colleagueBlocked
-      ? `<div style="font-size:0.78em; color:#b7791f; margin-top:4px;">⚠️ קולגה ביקש חופש — היעדרות חסומה</div>`
-      : '';
+    const colleagueWarning = '';
 
     html += `
       <div class="card" style="margin-bottom:12px;">
@@ -386,31 +416,30 @@ function renderConstraintDays() {
 }
 
 function selectDayPref(dayKey, val) {
-  const absenceVals    = _getAbsenceValues();
-  const maxAbsences    = parseInt(branchSettings.constraintsPerWeek) || 2;
-  const workDays       = parseInt(branchSettings.workDays) || 6;
-  const prev           = savedConstraints[dayKey] || {};
-  const prevVal        = prev.c1 || '';
-  const prevWasAbsence = prevVal && absenceVals.has(prevVal);
-  const newIsAbsence   = val && absenceVals.has(val);
+  const absenceVals = _getAbsenceValues();
+  const maxAbsences = parseInt(branchSettings.constraintsPerWeek) || 2;
+  const workDays    = parseInt(branchSettings.workDays) || 6;
+  const prev        = savedConstraints[dayKey] || {};
+  const prevVal     = prev.c1 || '';
+  const newIsAbsence = val && absenceVals.has(val);
 
-  if (newIsAbsence) {
-    // בדיקת מגבלת היעדרויות שבועית
-    if (!prevWasAbsence) {
-      let count = 0;
-      for (let i = 0; i < workDays; i++) {
-        const c1 = (savedConstraints[`day_${i}`] || {}).c1;
-        if (c1 && absenceVals.has(c1)) count++;
-      }
-      if (count >= maxAbsences) {
-        showMsg('constraints-msg', `❌ הגעת למגבלת ההיעדרויות השבועיות (${maxAbsences})`, 'error');
-        return;
-      }
+  // בדיקת מגבלת אילוצים שבועית — רק אם היום עדיין ריק (לא מחליפים קיים)
+  if (val && !prevVal) {
+    let count = 0;
+    for (let i = 0; i < workDays; i++) {
+      if ((savedConstraints[`day_${i}`] || {}).c1) count++;
     }
+    if (count >= maxAbsences) {
+      showMsg('constraints-msg', `❌ הגעת למגבלת האילוצים השבועיים (${maxAbsences})`, 'error');
+      return;
+    }
+  }
 
-    // בדיקת התנגשות עם קולגות
-    if (_colleagueHasAbsenceOnDay(dayKey)) {
-      showMsg('constraints-msg', '❌ עובד אחר מאותה מחלקה כבר ביקש חופש ביום זה', 'error');
+  // בדיקת התנגשות עם קולגה — לכל סוג אילוץ
+  if (val && val !== prevVal) {
+    const takenBy = _colleagueWhoTookConstraint(dayKey, val);
+    if (takenBy) {
+      showMsg('constraints-msg', `❌ אילוץ זה תפוס על ידי ${takenBy}`, 'error');
       return;
     }
   }
@@ -445,53 +474,159 @@ function changeWeekSchedule(delta) {
 }
 
 async function renderMySchedule() {
-  const weekKey = getWeekKey(currentWeekOffsetSchedule);
+  const weekKey   = getWeekKey(currentWeekOffsetSchedule);
   document.getElementById('schedule-week-label').textContent = formatWeekLabel(currentWeekOffsetSchedule);
 
-  const snap = await db.ref(`branches/${empBranchKey}/schedules/${weekKey}`).once('value');
-  const schedule = snap.val();
   const container = document.getElementById('my-schedule-container');
+  container.innerHTML = '<p style="color:#aaa; text-align:center; padding:30px;">⏳ טוען...</p>';
 
+  const [schedSnap, orgSnap] = await Promise.all([
+    db.ref(`branches/${empBranchKey}/schedules/${weekKey}`).once('value'),
+    db.ref(`branches/${empBranchKey}/org`).once('value'),
+  ]);
+
+  const schedule = schedSnap.val();
   if (!schedule || schedule.status !== 'published') {
     container.innerHTML = '<p style="color:#aaa; text-align:center; padding:30px;">📭 הסידור טרם פורסם לשבוע זה</p>';
     return;
   }
 
-  const workDays = parseInt(branchSettings.workDays) || 6;
-  const dayNames = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
-  const shifts   = branchShiftTypes;
+  const org         = orgSnap.val() || {};
+  const departments = org.departments || {};
+  const employees   = org.employees   || {};
+  const shiftTypes  = branchShiftTypes;
+  const workDays    = parseInt(branchSettings.workDays) || 6;
+  const dayNames    = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 
-  let html = '';
-  for (let i = 0; i < workDays; i++) {
-    const dayKey  = `day_${i}`;
-    const dayData = schedule[dayKey] || {};
-    const myShift = dayData[empUsername] || null;
+  let html = `<table class="schedule-table"><thead><tr>
+    <th>עובד</th>${Array.from({length: workDays}, (_, i) => `<th>${dayNames[i]}</th>`).join('')}
+  </tr></thead><tbody>`;
 
-    if (myShift) {
-      const shiftChips = String(myShift).split('|').map(sk => {
-        const st = shifts[sk] || { name: sk };
-        return `<span class="shift-chip shift-color-0">${st.name}${st.start ? ` ${st.start}–${st.end}` : ''}</span>`;
-      }).join(' ');
-      html += `
-        <div class="card" style="margin-bottom:10px;">
-          <strong>📅 יום ${dayNames[i]}</strong>
-          <div style="margin-top:8px">${shiftChips}</div>
-        </div>`;
-    } else {
-      html += `
-        <div class="card" style="margin-bottom:10px; background:#fafafa;">
-          <strong>📅 יום ${dayNames[i]}</strong>
-          <div style="margin-top:8px; color:#aaa;">יום חופש 🏖️</div>
-        </div>`;
+  for (const [, dept] of Object.entries(departments)) {
+    html += `<tr class="dept-divider"><td colspan="${workDays + 1}">🏬 ${dept.name}</td></tr>`;
+    const deptEmps = dept.employees ? Object.keys(dept.employees) : [];
+    for (const empKey of deptEmps) {
+      const emp = employees[empKey] || {};
+      const isMe = empKey === empUsername;
+      html += `<tr${isMe ? ' style="background:#fffbe6;"' : ''}>
+        <td style="font-weight:bold">${emp.displayName || empKey}${isMe ? ' 👤' : ''}</td>`;
+      for (let d = 0; d < workDays; d++) {
+        const shiftVal = schedule[`day_${d}`]?.[empKey];
+        if (shiftVal) {
+          const chips = String(shiftVal).split('|').map(sk => {
+            const st  = shiftTypes[sk] || { name: sk };
+            const idx = Object.keys(shiftTypes).indexOf(sk);
+            const hours = (st.start && st.end) ? `<br><small style="font-size:0.75em;opacity:0.8;">${st.start}–${st.end}</small>` : '';
+            return `<span class="shift-chip shift-color-${idx % 6}">${st.name}${hours}</span>`;
+          }).join(' ');
+          html += `<td>${chips}</td>`;
+        } else {
+          html += `<td><span style="color:#ccc">—</span></td>`;
+        }
+      }
+      html += `</tr>`;
     }
   }
 
-  container.innerHTML = html || '<p style="color:#aaa">אין נתונים</p>';
+  html += `</tbody></table>`;
+  container.innerHTML = html;
+  requestAnimationFrame(scaleEmpScheduleTable);
+}
+
+let _schedNaturalH = 0;
+let _schedScale    = 1;
+let _pinchDist0    = 0;
+let _pinchScale0   = 1;
+
+function scaleEmpScheduleTable() {
+  const container = document.getElementById('my-schedule-container');
+  const table = container ? container.querySelector('table') : null;
+  if (!table) return;
+
+  table.style.transform = '';
+  table.style.transformOrigin = 'top right';
+  table.style.width = '';
+  container.style.height = '';
+
+  const tableRect  = table.getBoundingClientRect();
+  const targetRect = container.getBoundingClientRect();
+
+  _schedNaturalH = tableRect.height;
+  _schedScale    = 1;
+
+  if (tableRect.width > targetRect.width + 1) {
+    _schedScale = targetRect.width / tableRect.width;
+  }
+
+  table.style.transform = `scale(${_schedScale})`;
+  container.style.height = (_schedNaturalH * _schedScale) + 'px';
+
+  _initSchedulePinchZoom(container);
+}
+
+function _initSchedulePinchZoom(container) {
+  if (container._pinchInited) return;
+  container._pinchInited = true;
+
+  const dist = (t1, t2) => Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+
+  container.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) {
+      _pinchDist0  = dist(e.touches[0], e.touches[1]);
+      _pinchScale0 = _schedScale;
+    }
+  }, { passive: true });
+
+  container.addEventListener('touchmove', e => {
+    if (e.touches.length !== 2) return;
+    e.preventDefault();
+    const d = dist(e.touches[0], e.touches[1]);
+    if (!_pinchDist0) return;
+    const newScale = Math.max(0.3, Math.min(3.0, _pinchScale0 * (d / _pinchDist0)));
+    _schedScale = newScale;
+    const tbl = container.querySelector('table');
+    if (tbl) {
+      tbl.style.transform = `scale(${newScale})`;
+      tbl.style.transformOrigin = 'top right';
+      container.style.height = (_schedNaturalH * newScale) + 'px';
+    }
+  }, { passive: false });
 }
 
 // ===========================================
 // HELPERS
 // ===========================================
+function showTakenByMsg(btn) {
+  const name = btn.getAttribute('data-taken-by');
+  showToast(`❌ אילוץ זה תפוס על ידי ${name}`, 'error');
+}
+
+function showLimitMsg(max) {
+  showToast(`❌ הגעת למגבלת האילוצים השבועיים (${max})`, 'error');
+}
+
+function showToast(text, type = 'info') {
+  let toast = document.getElementById('emp-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'emp-toast';
+    toast.style.cssText = `
+      position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+      z-index: 9999; padding: 12px 20px; border-radius: 10px;
+      font-size: 15px; font-weight: bold; text-align: center;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.25); max-width: 90vw;
+      direction: rtl;
+    `;
+    document.body.appendChild(toast);
+  }
+  toast.textContent = text;
+  toast.style.background = type === 'error' ? '#f8d7da' : type === 'success' ? '#d4edda' : '#cce5ff';
+  toast.style.color      = type === 'error' ? '#721c24' : type === 'success' ? '#155724' : '#004085';
+  toast.style.display    = 'block';
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => { toast.style.display = 'none'; }, 3500);
+}
+
 function showMsg(elId, text, type = 'info') {
   const el = document.getElementById(elId);
   if (!el) return;

@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, minimum-scale=0.3, maximum-scale=3.0">
   <title>ממשק עובד — ShiftSaaS</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -40,12 +40,10 @@
 
     <!-- Constraints Tab -->
     <div id="tab-constraints" class="tab-panel active">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-        <h3 style="margin:0">שבוע: <span id="constraint-week-label">—</span></h3>
-        <div style="display:flex; gap:8px;">
-          <button class="btn sm secondary" onclick="changeWeek(-1)">← שבוע קודם</button>
-          <button class="btn sm secondary" onclick="changeWeek(1)">שבוע הבא →</button>
-        </div>
+      <div style="display:flex; align-items:center; justify-content:center; gap:6px; margin-bottom:16px;">
+        <button class="btn sm secondary" onclick="changeWeek(-1)">← קודם</button>
+        <span id="constraint-week-label" style="font-weight:bold; padding:6px 10px; background:#f0f3ff; border-radius:8px; font-size:13px; white-space:nowrap;">—</span>
+        <button class="btn sm secondary" onclick="changeWeek(1)">הבא →</button>
       </div>
 
       <div id="constraint-days-container"></div>
@@ -56,12 +54,10 @@
 
     <!-- Schedule Tab -->
     <div id="tab-schedule" class="tab-panel">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-        <h3 style="margin:0">סידור שבוע: <span id="schedule-week-label">—</span></h3>
-        <div style="display:flex; gap:8px;">
-          <button class="btn sm secondary" onclick="changeWeekSchedule(-1)">← שבוע קודם</button>
-          <button class="btn sm secondary" onclick="changeWeekSchedule(1)">שבוע הבא →</button>
-        </div>
+      <div style="display:flex; align-items:center; justify-content:center; gap:6px; margin-bottom:16px;">
+        <button class="btn sm secondary" onclick="changeWeekSchedule(-1)">← קודם</button>
+        <span id="schedule-week-label" style="font-weight:bold; padding:6px 10px; background:#f0f3ff; border-radius:8px; font-size:13px; white-space:nowrap;">—</span>
+        <button class="btn sm secondary" onclick="changeWeekSchedule(1)">הבא →</button>
       </div>
       <div id="my-schedule-container">
         <p style="color:#aaa; text-align:center; padding:30px;">הסידור טרם פורסם לשבוע זה</p>

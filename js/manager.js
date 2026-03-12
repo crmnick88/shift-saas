@@ -9,6 +9,8 @@ let currentWeekOffset = 0;
 let currentWeekOffsetConstraints = 0;
 let currentScheduleData = {};
 
+window.addEventListener('resize', scaleScheduleTable);
+
 // ===========================================
 // INIT
 // ===========================================
@@ -31,6 +33,7 @@ const [orgSnap, nameSnap, subSnap, codeSnap, settSnap] = await Promise.all([
 
 orgData     = orgSnap.val()  || {};
 mgrSettings = settSnap.val() || {};
+orgData.subscription = (subSnap ? subSnap.val() : null) || {};
 
 document.getElementById('mgr-branch-name').textContent = '🏢 ' + (nameSnap.val() || 'פורטל ניהול');
 
@@ -38,8 +41,17 @@ const branchCode = codeSnap.val();
 document.getElementById('mgr-branch-code').textContent =
   `קוד סניף לעובדים: ${branchCode || 'לא הוגדר עדיין'}`;
 
-// Trial banner
-checkTrial();
+// Subscription check (admin always bypasses)
+const ADMIN_UID = 'AgyppSpe0qZ6WZLf6zyBsDb0a5k1';
+if (user.uid !== ADMIN_UID && isSubscriptionBlocked(orgData.subscription)) {
+  showExpiredScreen(orgData.subscription);
+  return;
+}
+
+checkTrial(user.uid === ADMIN_UID);
+
+// Record last login time
+db.ref(`branches/${mgrBranchKey}/lastLogin`).set(Date.now()).catch(() => {});
 
 showScreen('screen-main');
 renderWeekLabels();
@@ -48,9 +60,28 @@ renderBranchInfo();
 subscribeMgrToPush();
 });
 
-function checkTrial() {
+function isSubscriptionBlocked(sub) {
+  if (!sub) return false;
+  if (sub.status === 'blocked') return true;
+  if (sub.status === 'active')  return false;
+  // trial or unknown — check expiry
+  if (sub.trialEnds && sub.trialEnds < Date.now()) return true;
+  return false;
+}
+
+function showExpiredScreen(sub) {
+  showScreen('screen-expired');
+  const isBlocked = sub && sub.status === 'blocked';
+  document.getElementById('expired-title').textContent = isBlocked ? '🚫 החשבון חסום' : '⏰ תוקף הניסיון פג';
+  document.getElementById('expired-msg').textContent   = isBlocked
+    ? 'החשבון שלך חסום. אנא פנה לתמיכה.'
+    : 'תקופת הניסיון החינמית הסתיימה. שדרג כדי להמשיך להשתמש.';
+}
+
+function checkTrial(isAdmin) {
   try {
     const sub = orgData.subscription || {};
+    if (isAdmin) return; // admin always has full access
     if (sub.status === 'trial' && sub.trialEnds) {
       const daysLeft = Math.ceil((sub.trialEnds - Date.now()) / (1000*60*60*24));
       if (daysLeft > 0) {
@@ -83,7 +114,10 @@ function switchTab(tabId) {
 function getWeekKey(offset = 0) {
   const d = new Date();
   d.setDate(d.getDate() - d.getDay() + offset * 7);
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function formatWeekLabel(offset = 0) {
@@ -166,6 +200,16 @@ async function runAutoSchedule() {
 }
 
 
+async function deleteSchedule() {
+  const weekKey = getWeekKey(currentWeekOffset);
+  if (!confirm('למחוק את הסידור של השבוע הנוכחי?')) return;
+  await db.ref(`branches/${mgrBranchKey}/schedules/${weekKey}`).remove();
+  currentScheduleData = {};
+  document.getElementById('schedule-container').innerHTML =
+    '<p style="color:#aaa; text-align:center; padding:40px;">לחץ "סידור אוטומטי" או בנה ידנית</p>';
+  showMsg('schedule-msg', '🗑️ הסידור נמחק', 'info');
+}
+
 async function publishSchedule() {
   const weekKey = getWeekKey(currentWeekOffset);
   if (!currentScheduleData || Object.keys(currentScheduleData).length === 0)
@@ -214,6 +258,33 @@ function renderScheduleTable(schedule) {
 
   html += `</tbody></table>`;
   document.getElementById('schedule-container').innerHTML = html;
+  requestAnimationFrame(scaleScheduleTable);
+}
+
+function scaleScheduleTable() {
+  const container = document.getElementById('schedule-container');
+  const table = container ? container.querySelector('table') : null;
+  if (!table) return;
+
+  // Reset
+  table.style.transform = '';
+  table.style.transformOrigin = '';
+  table.style.width = '';
+  container.style.height = '';
+
+  // getBoundingClientRect מחזיר גדלים אמיתיים שהדפדפן צייר בפועל
+  const tableRect  = table.getBoundingClientRect();
+  const targetRect = container.getBoundingClientRect();
+
+  const tableWidth  = tableRect.width;
+  const targetWidth = targetRect.width;
+
+  if (tableWidth > targetWidth + 1) {
+    const scale = targetWidth / tableWidth;
+    table.style.transform = `scale(${scale})`;
+    table.style.transformOrigin = 'top right';
+    container.style.height = (tableRect.height * scale) + 'px';
+  }
 }
 
 // ===========================================

@@ -66,7 +66,7 @@ async function ensureBranchExists(uid) {
     managerUid:  uid,
     displayName: 'סניף חדש',
     createdAt:   Date.now(),
-    subscription: { status: 'trial', trialEnds: Date.now() + 14 * 24 * 60 * 60 * 1000 },
+    subscription: { status: 'trial', trialEnds: Date.now() + 30 * 24 * 60 * 60 * 1000 },
     org: {
       employees:       {},
       departments:     {},
