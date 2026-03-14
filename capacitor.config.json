@@ -1,6 +1,6 @@
 {
   "appId": "com.shiftsaas.app",
-  "appName": "ShiftSaaS",
+  "appName": "ניהול משמרות",
   "webDir": "www",
   "server": {
     "url": "https://shift-saas.web.app"

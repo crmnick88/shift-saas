@@ -1,6 +1,6 @@
 {
-  "name": "ShiftSaaS — ניהול סידור עבודה",
-  "short_name": "ShiftSaaS",
+  "name": "ניהול משמרות",
+  "short_name": "ניהול משמרות",
   "description": "מערכת ניהול סידור עבודה חכמה לכל עסק",
   "start_url": "./index.html",
   "display": "standalone",
