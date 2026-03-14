@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>עזרה ותמיכה — ShiftSaaS</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container">
+
+  <div style="text-align:center; margin-bottom:24px;">
+    <div style="font-size:52px; margin-bottom:10px;">🆘</div>
+    <h2 style="margin-bottom:6px;">עזרה ותמיכה</h2>
+    <p style="color:#888; font-size:14px;">כאן תמצא תשובות לשאלות נפוצות והוראות שימוש</p>
+  </div>
+
+  <!-- יצירת קשר -->
+  <div class="card" style="text-align:center; margin-bottom:24px; background:#f0f3ff; border-color:#667eea;">
+    <h3 style="margin-bottom:14px;">לא מצאת תשובה? נשמח לעזור</h3>
+    <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+      <a href="https://wa.me/9720508724151" target="_blank"
+         style="display:inline-flex; align-items:center; gap:8px; background:#25D366; color:white; padding:12px 22px; border-radius:10px; font-size:15px; font-weight:bold; text-decoration:none;">
+        💬 וואטסאפ
+      </a>
+      <a href="mailto:SERVICE@SHIFT.COM"
+         style="display:inline-flex; align-items:center; gap:8px; background:#667eea; color:white; padding:12px 22px; border-radius:10px; font-size:15px; font-weight:bold; text-decoration:none;">
+        ✉️ אימייל
+      </a>
+    </div>
+  </div>
+
+  <!-- הוראות שימוש -->
+  <h3 style="margin-bottom:14px;">📖 הוראות שימוש</h3>
+
+  <div class="card" style="margin-bottom:12px;">
+    <div class="card-header" onclick="toggleSection('inst-1')" style="cursor:pointer;">
+      <span class="card-title">🔧 הגדרת הסניף הראשונה</span>
+      <span id="inst-1-icon">▼</span>
+    </div>
+    <div id="inst-1" style="font-size:14px; color:#555; line-height:1.8;">
+      <p>לאחר ההרשמה, עובר תהליך הגדרה של 6 שלבים:</p>
+      <ol style="padding-right:18px; margin-top:8px;">
+        <li><strong>פרטי העסק</strong> — שם הסניף ומספר ימי עבודה בשבוע</li>
+        <li><strong>סוגי משמרות</strong> — הגדר שם, שעת התחלה וסיום לכל משמרת</li>
+        <li><strong>מחלקות</strong> — צור מחלקות/תפקידים בעסק</li>
+        <li><strong>עובדים</strong> — הוסף את כל העובדים עם שם משתמש וסיסמה</li>
+        <li><strong>סוגי היעדרויות</strong> — חופש, מחלה וכו'</li>
+        <li><strong>דרישות שיבוץ</strong> — כמה עובדים נדרשים בכל משמרת</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px;">
+    <div class="card-header" onclick="toggleSection('inst-2')" style="cursor:pointer;">
+      <span class="card-title">📅 יצירת סידור עבודה</span>
+      <span id="inst-2-icon">▼</span>
+    </div>
+    <div id="inst-2" style="display:none; font-size:14px; color:#555; line-height:1.8;">
+      <ol style="padding-right:18px;">
+        <li>בחר את השבוע הרצוי בלשונית <strong>סידור</strong></li>
+        <li>לחץ <strong>סדר אוטומטי</strong> — המערכת תיצור סידור לפי הדרישות</li>
+        <li>ערוך ידנית לפי הצורך על ידי לחיצה על כל תא</li>
+        <li>לחץ <strong>פרסם סידור</strong> כדי שהעובדים יוכלו לראות אותו</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px;">
+    <div class="card-header" onclick="toggleSection('inst-3')" style="cursor:pointer;">
+      <span class="card-title">👤 הוספת עובדים</span>
+      <span id="inst-3-icon">▼</span>
+    </div>
+    <div id="inst-3" style="display:none; font-size:14px; color:#555; line-height:1.8;">
+      <ol style="padding-right:18px;">
+        <li>עבור לטאב <strong>עובדים</strong> בפורטל המנהל</li>
+        <li>לחץ <strong>הוסף עובד</strong></li>
+        <li>הזן שם משתמש, סיסמה ומחלקה</li>
+        <li>שלח לעובד את <strong>קוד הסניף</strong> שמופיע בראש הדף</li>
+        <li>העובד נכנס דרך <strong>כניסת עובד</strong> עם הקוד + שם משתמש + סיסמה</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px;">
+    <div class="card-header" onclick="toggleSection('inst-4')" style="cursor:pointer;">
+      <span class="card-title">🔔 שליחת התראות לעובדים</span>
+      <span id="inst-4-icon">▼</span>
+    </div>
+    <div id="inst-4" style="display:none; font-size:14px; color:#555; line-height:1.8;">
+      <ol style="padding-right:18px;">
+        <li>עבור ל<strong>הגדרות ← התראות פוש</strong></li>
+        <li>הגדר תזמון — באיזה ימים ושעות לשלוח תזכורת לעובדים</li>
+        <li>אפשר לשלוח גם הודעה ידנית מיידית</li>
+        <li>ההתראה תגיע לכל עובד שהתקין את האפליקציה</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- שאלות נפוצות -->
+  <h3 style="margin-top:24px; margin-bottom:14px;">❓ שאלות נפוצות</h3>
+
+  <div class="card" style="margin-bottom:12px;">
+    <div class="card-header" onclick="toggleSection('faq-1')" style="cursor:pointer;">
+      <span class="card-title">שכחתי סיסמה — מה עושים?</span>
+      <span id="faq-1-icon">▼</span>
+    </div>
+    <div id="faq-1" style="display:none; font-size:14px; color:#555; line-height:1.8;">
+      בדף הכניסה לחץ על <strong>שכחתי סיסמה</strong> (זמין בקרוב) או צור קשר עם התמיכה.
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px;">
+    <div class="card-header" onclick="toggleSection('faq-2')" style="cursor:pointer;">
+      <span class="card-title">עובד לא רואה את הסידור</span>
+      <span id="faq-2-icon">▼</span>
+    </div>
+    <div id="faq-2" style="display:none; font-size:14px; color:#555; line-height:1.8;">
+      ודא שלחצת <strong>פרסם סידור</strong> — עד שהסידור לא פורסם הוא גלוי למנהל בלבד.
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px;">
+    <div class="card-header" onclick="toggleSection('faq-3')" style="cursor:pointer;">
+      <span class="card-title">איך מוסיפים / מוחקים עובד?</span>
+      <span id="faq-3-icon">▼</span>
+    </div>
+    <div id="faq-3" style="display:none; font-size:14px; color:#555; line-height:1.8;">
+      בפורטל המנהל עבור לטאב <strong>עובדים</strong>. שם תוכל להוסיף עובד חדש או למחוק קיים. מחיקת עובד לא מוחקת סידורים ישנים שבהם הופיע.
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px;">
+    <div class="card-header" onclick="toggleSection('faq-4')" style="cursor:pointer;">
+      <span class="card-title">איך העובד מזין אילוצים?</span>
+      <span id="faq-4-icon">▼</span>
+    </div>
+    <div id="faq-4" style="display:none; font-size:14px; color:#555; line-height:1.8;">
+      העובד נכנס לאפליקציה עם שם המשתמש וסיסמה שנקבעו לו. בטאב <strong>אילוצים</strong> הוא בוחר שבוע ומסמן ימים שבהם הוא לא יכול / מעדיף לעבוד.
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px;">
+    <div class="card-header" onclick="toggleSection('faq-5')" style="cursor:pointer;">
+      <span class="card-title">הסידור האוטומטי לא עובד טוב — מה לעשות?</span>
+      <span id="faq-5-icon">▼</span>
+    </div>
+    <div id="faq-5" style="display:none; font-size:14px; color:#555; line-height:1.8;">
+      ודא שהוגדרו <strong>דרישות שיבוץ</strong> נכונות (כמה עובדים נדרשים בכל משמרת). בנוסף, המערכת מכבדת אילוצי עובדים — אם לעובדים יש הרבה אילוצים ייתכן שלא יהיה מספיק כוח אדם.
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:24px;">
+    <div class="card-header" onclick="toggleSection('faq-6')" style="cursor:pointer;">
+      <span class="card-title">האפליקציה לא נטענת / תקועה</span>
+      <span id="faq-6-icon">▼</span>
+    </div>
+    <div id="faq-6" style="display:none; font-size:14px; color:#555; line-height:1.8;">
+      נסה לסגור ולפתוח מחדש את האפליקציה. אם הבעיה נמשכת — ודא שיש חיבור לאינטרנט. במידה והבעיה ממשיכה צור קשר עם התמיכה.
+    </div>
+  </div>
+
+  <button class="btn secondary" onclick="history.back()">← חזרה</button>
+
+</div>
+
+<script>
+function toggleSection(id) {
+  const el = document.getElementById(id);
+  const icon = document.getElementById(id + '-icon');
+  if (!el) return;
+  const isOpen = el.style.display !== 'none';
+  el.style.display = isOpen ? 'none' : 'block';
+  if (icon) icon.textContent = isOpen ? '▼' : '▲';
+}
+// פתח את הראשון כברירת מחדל
+document.getElementById('inst-1').style.display = 'block';
+document.getElementById('inst-1-icon').textContent = '▲';
+</script>
+</body>
+</html>

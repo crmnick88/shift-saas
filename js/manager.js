@@ -8,6 +8,8 @@ let mgrSettings  = {};
 let currentWeekOffset = 0;
 let currentWeekOffsetConstraints = 0;
 let currentScheduleData = {};
+let _editEmpKey = null;
+let _editDayKey = null;
 
 window.addEventListener('resize', scaleScheduleTable);
 
@@ -23,12 +25,14 @@ auth.onAuthStateChanged(async (user) => {
   if (!mgrBranchKey) { window.location.href = 'index.html'; return; }
 
   // Load all org data
-const [orgSnap, nameSnap, subSnap, codeSnap, settSnap] = await Promise.all([
+const [orgSnap, nameSnap, subSnap, codeSnap, settSnap, setupSnap, staffingSnap] = await Promise.all([
   db.ref(`branches/${mgrBranchKey}/org`).once('value'),
   db.ref(`branches/${mgrBranchKey}/displayName`).once('value'),
   db.ref(`branches/${mgrBranchKey}/subscription`).once('value').catch(() => null),
   db.ref(`branches/${mgrBranchKey}/branchCode`).once('value'),
   db.ref(`branches/${mgrBranchKey}/settings`).once('value'),
+  db.ref(`branches/${mgrBranchKey}/setupComplete`).once('value'),
+  db.ref(`branches/${mgrBranchKey}/staffingRules`).once('value'),
 ]);
 
 orgData     = orgSnap.val()  || {};
@@ -45,6 +49,12 @@ document.getElementById('mgr-branch-code').textContent =
 const ADMIN_UID = 'AgyppSpe0qZ6WZLf6zyBsDb0a5k1';
 if (user.uid !== ADMIN_UID && isSubscriptionBlocked(orgData.subscription)) {
   showExpiredScreen(orgData.subscription);
+  return;
+}
+
+// Welcome screen — מנהל חדש שלא השלים הגדרה
+if (!setupSnap.val() && user.uid !== ADMIN_UID) {
+  showWelcomeScreen(nameSnap.val(), orgData, staffingSnap.val() || {});
   return;
 }
 
@@ -67,6 +77,35 @@ function isSubscriptionBlocked(sub) {
   // trial or unknown — check expiry
   if (sub.trialEnds && sub.trialEnds < Date.now()) return true;
   return false;
+}
+
+function showWelcomeScreen(branchName, org, staffingRules) {
+  const checks = [
+    { label: 'שם הסניף הוגדר',       done: !!branchName },
+    { label: 'סוגי משמרות הוגדרו',   done: Object.keys(org.shiftTypes     || {}).length > 0 },
+    { label: 'מחלקות הוגדרו',        done: Object.keys(org.departments    || {}).length > 0 },
+    { label: 'עובדים נוספו',          done: Object.keys(org.employees      || {}).length > 0 },
+    { label: 'סוגי היעדרות הוגדרו',  done: Object.keys(org.constraintTypes|| {}).length > 0 },
+    { label: 'דרישות שיבוץ הוגדרו', done: Object.keys(staffingRules       || {}).length > 0 },
+  ];
+
+  document.getElementById('welcome-checklist').innerHTML = checks.map(c => `
+    <div style="display:flex; align-items:center; gap:12px; padding:10px 14px; margin-bottom:8px;
+                background:${c.done ? '#f0fdf4' : '#fff'}; border-radius:10px;
+                border:1.5px solid ${c.done ? '#86efac' : '#e2e8f0'};">
+      <span style="font-size:20px;">${c.done ? '✅' : '⬜'}</span>
+      <span style="font-size:14px; color:${c.done ? '#166534' : '#475569'};">${c.label}</span>
+    </div>
+  `).join('');
+
+  showScreen('screen-welcome');
+}
+
+function skipWelcome() {
+  showScreen('screen-main');
+  renderWeekLabels();
+  renderEmployeeList();
+  renderBranchInfo();
 }
 
 function showExpiredScreen(sub) {
@@ -247,9 +286,9 @@ function renderScheduleTable(schedule) {
             const hours = (st.start && st.end) ? `<br><small style="font-size:0.75em;opacity:0.8;">${st.start}–${st.end}</small>` : '';
             return `<span class="shift-chip shift-color-${idx % 6}">${st.name}${hours}</span>`;
           }).join(' ');
-          html += `<td>${chips}</td>`;
+          html += `<td data-emp="${empKey}" data-day="${dayKey}" style="cursor:pointer;">${chips}</td>`;
         } else {
-          html += `<td><span style="color:#ccc">—</span></td>`;
+          html += `<td data-emp="${empKey}" data-day="${dayKey}" style="cursor:pointer;"><span style="color:#ccc">—</span></td>`;
         }
       }
       html += `</tr>`;
@@ -258,6 +297,15 @@ function renderScheduleTable(schedule) {
 
   html += `</tbody></table>`;
   document.getElementById('schedule-container').innerHTML = html;
+
+  const tableEl = document.querySelector('#schedule-container table');
+  if (tableEl) {
+    tableEl.addEventListener('click', function(e) {
+      const td = e.target.closest('td[data-emp]');
+      if (td) openEditPopup(td.dataset.emp, td.dataset.day);
+    });
+  }
+
   requestAnimationFrame(scaleScheduleTable);
 }
 
@@ -285,6 +333,65 @@ function scaleScheduleTable() {
     table.style.transformOrigin = 'top right';
     container.style.height = (tableRect.height * scale) + 'px';
   }
+}
+
+// ===========================================
+// עריכת משמרת ידנית
+// ===========================================
+function openEditPopup(empKey, dayKey) {
+  if (!currentScheduleData) return;
+  _editEmpKey = empKey;
+  _editDayKey = dayKey;
+
+  const emp       = (orgData.employees || {})[empKey] || {};
+  const dayNames  = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
+  const dayIndex  = parseInt(dayKey.replace('day_', ''));
+  document.getElementById('shift-edit-emp-name').textContent =
+    (emp.displayName || empKey) + ' — יום ' + (dayNames[dayIndex] || dayKey);
+
+  const shiftTypes = orgData.shiftTypes || {};
+  const current    = (currentScheduleData[dayKey] || {})[empKey] || null;
+  const container  = document.getElementById('shift-edit-options');
+  container.innerHTML = '';
+
+  // אפשרות חופש
+  const offBtn = document.createElement('button');
+  offBtn.className = 'btn ' + (current === null ? 'success' : 'secondary');
+  offBtn.textContent = (current === null ? '✓ ' : '') + 'חופש';
+  offBtn.onclick = () => applyShiftEdit(null);
+  container.appendChild(offBtn);
+
+  // כל סוגי המשמרות
+  for (const [sk, st] of Object.entries(shiftTypes)) {
+    const isSelected = current && String(current).split('|').includes(sk);
+    const btn = document.createElement('button');
+    btn.className = 'btn ' + (isSelected ? 'success' : '');
+    btn.textContent = (isSelected ? '✓ ' : '') + st.name +
+      (st.start && st.end ? ' (' + st.start + '–' + st.end + ')' : '');
+    btn.onclick = () => applyShiftEdit(sk);
+    container.appendChild(btn);
+  }
+
+  document.getElementById('shift-edit-popup').style.display = 'flex';
+}
+
+async function applyShiftEdit(shiftKey) {
+  if (!_editEmpKey || !_editDayKey) return;
+  const weekKey = getWeekKey(currentWeekOffset);
+
+  if (!currentScheduleData[_editDayKey]) currentScheduleData[_editDayKey] = {};
+  currentScheduleData[_editDayKey][_editEmpKey] = shiftKey;
+
+  await db.ref(`branches/${mgrBranchKey}/schedules/${weekKey}/${_editDayKey}/${_editEmpKey}`).set(shiftKey);
+
+  closeEditPopup();
+  renderScheduleTable(currentScheduleData);
+}
+
+function closeEditPopup() {
+  document.getElementById('shift-edit-popup').style.display = 'none';
+  _editEmpKey = null;
+  _editDayKey = null;
 }
 
 // ===========================================
@@ -515,6 +622,7 @@ function renderEmployeeList() {
           <div class="item-meta">מחלקה: ${deptName}${emp.role ? ' | ' + emp.role : ''}</div>
         </div>
         <div class="item-actions">
+          <button class="btn sm secondary" onclick="changeEmpPassword('${key}')">🔑</button>
           <button class="btn sm danger" onclick="removeEmployee('${key}')">🗑️</button>
         </div>
       </div>
@@ -527,6 +635,15 @@ function renderEmployeeList() {
     sel.innerHTML = '<option value="">-- בחר מחלקה --</option>' +
       Object.entries(departments).map(([k,d]) => `<option value="${k}">${d.name}</option>`).join('');
   }
+}
+
+async function changeEmpPassword(key) {
+  const newPass = prompt(`סיסמה חדשה לעובד "${orgData.employees?.[key]?.displayName || key}":`);
+  if (!newPass || !newPass.trim()) return;
+  if (newPass.trim().length < 4) return alert('הסיסמה חייבת לפחות 4 תווים');
+  await db.ref(`branches/${mgrBranchKey}/org/employees/${key}/password`).set(newPass.trim());
+  if (orgData.employees?.[key]) orgData.employees[key].password = newPass.trim();
+  alert(`✅ הסיסמה עודכנה לעובד ${orgData.employees?.[key]?.displayName || key}`);
 }
 
 function showAddEmpModal() {

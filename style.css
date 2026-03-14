@@ -9,6 +9,7 @@ body {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   min-height: 100vh;
   padding: 20px;
+  padding-bottom: calc(20px + var(--nav-bar-height, 100px));
   direction: rtl;
 }
 
@@ -19,6 +20,7 @@ body {
   border-radius: 20px;
   box-shadow: 0 20px 60px rgba(0,0,0,0.3);
   padding: 30px;
+  padding-bottom: calc(30px + var(--nav-bar-height, 100px));
 }
 
 h1 {
@@ -250,7 +252,8 @@ textarea { resize: vertical; min-height: 80px; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-width: 70px;
+  min-width: 48px;
+  flex: 1;
   position: relative;
 }
 .step:not(:last-child)::after {
@@ -281,7 +284,7 @@ textarea { resize: vertical; min-height: 80px; }
 }
 .step.active .step-num { background: #667eea; color: white; }
 .step.done .step-num   { background: #28a745; color: white; }
-.step-label { font-size: 11px; color: #888; margin-top: 5px; text-align: center; }
+.step-label { font-size: 10px; color: #888; margin-top: 5px; text-align: center; }
 .step.active .step-label { color: #667eea; font-weight: bold; }
 .step.done .step-label   { color: #28a745; }
 

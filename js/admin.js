@@ -202,8 +202,8 @@ function renderTable(branches) {
           </div>
           <button class="btn sm" onclick="setStatus('${uid}','active')"  style="background:#22c55e;color:#fff;">פעיל</button>
           <button class="btn sm danger" onclick="setStatus('${uid}','blocked')">חסום</button>
-          <button class="btn sm secondary" onclick="openNoteModal('${uid}','${escHtml(displayName)}')">📝</button>
-          <button class="btn sm danger" onclick="deleteBranch('${uid}','${escHtml(displayName)}')">🗑️</button>
+          <button class="btn sm secondary" onclick="openNoteModal('${uid}',${escHtml(JSON.stringify(displayName))})">📝</button>
+          <button class="btn sm danger" onclick="deleteBranch('${uid}',${escHtml(JSON.stringify(displayName))})">🗑️</button>
         </div>
       </td>
     </tr>`;
@@ -328,11 +328,12 @@ async function deleteBranch(uid, name) {
   if (!confirm(`למחוק את הסניף "${name}"?\nפעולה זו בלתי הפיכה!`)) return;
   if (!confirm(`אישור סופי — למחוק את "${name}" לצמיתות?`)) return;
   try {
-    await db.ref(`branches/${uid}`).remove();
+    const fn = firebase.app().functions('europe-west1').httpsCallable('adminDeleteBranch');
+    await fn({ uid });
     showMsg('success', `סניף "${name}" נמחק`);
     await loadBranches();
   } catch (e) {
-    showMsg('error', 'שגיאה: ' + e.message);
+    showMsg('error', 'שגיאה: ' + (e.message || e));
   }
 }
 

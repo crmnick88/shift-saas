@@ -8,7 +8,8 @@ const setupData = {
   shiftTypes: {},       // { key: {name, start, end} }
   departments: {},      // { key: {name, min, max} }
   employees: {},        // { key: {displayName, password, dept, role} }
-  constraintTypes: {}   // { key: {label, value, category, scope} }
+  constraintTypes: {},  // { key: {label, value, category, scope} }
+  staffingRules:   {}   // { scope: { deptKey: { shiftKey: number } } }
 };
 
 let branchKey = null;
@@ -17,7 +18,7 @@ let branchKey = null;
 // INIT — wait for auth
 // ===========================================
 auth.onAuthStateChanged(async (user) => {
-  if (!user) {
+  if (!user || user.isAnonymous) {
     window.location.href = 'index.html';
     return;
   }
@@ -55,6 +56,9 @@ async function loadExistingData() {
     if (sett.workDays)           document.getElementById('s1-work-days').value           = sett.workDays;
     if (sett.lang)               document.getElementById('s1-lang').value               = sett.lang;
     if (sett.constraintsPerWeek) document.getElementById('s1-constraints-per-week').value = sett.constraintsPerWeek;
+
+    const staffSnap = await db.ref(`branches/${branchKey}/staffingRules`).once('value');
+    if (staffSnap.val()) Object.assign(setupData.staffingRules, staffSnap.val());
   } catch (e) { console.warn('loadExistingData:', e); }
 }
 
@@ -86,12 +90,15 @@ function goStep(n) {
   window.scrollTo(0, 0);
 }
 
+let currentStaffingScope = 'weekday';
+
 function renderAll() {
   renderShiftTypes();
   renderDepts();
   renderEmployees();
   renderConstraintTypes();
   updateDeptSelect();
+  renderStaffingTable();
 }
 
 // ===========================================
@@ -354,21 +361,96 @@ function renderConstraintTypes() {
   `).join('');
 }
 
-async function finishSetup() {
+async function saveStep5() {
   if (Object.keys(setupData.constraintTypes).length === 0)
     return showMsg('s5-msg', 'הוסף לפחות סוג אילוץ אחד (או לחץ "טען אילוצים בסיסיים")', 'error');
 
-  showMsg('s5-msg', '⏳ שומר...', 'info');
+  await db.ref(`branches/${branchKey}/org/constraintTypes`).set(setupData.constraintTypes);
+  goStep(6);
+}
 
+// ===========================================
+// STEP 6 — Staffing Rules
+// ===========================================
+function setStaffingScope(scope) {
+  currentStaffingScope = scope;
+  ['weekday', 'friday', 'saturday'].forEach(s => {
+    const btn = document.getElementById('s6-tab-' + s);
+    if (btn) btn.className = 'btn sm ' + (s === scope ? 'success' : 'secondary');
+  });
+  renderStaffingTable();
+}
+
+function renderStaffingTable() {
+  const el = document.getElementById('s6-table-wrap');
+  if (!el) return;
+  const depts  = Object.entries(setupData.departments);
+  const shifts = Object.entries(setupData.shiftTypes);
+  if (depts.length === 0 || shifts.length === 0) {
+    el.innerHTML = '<p style="color:#aaa; text-align:center; padding:16px;">חזור לשלבים הקודמים והגדר מחלקות ומשמרות תחילה</p>';
+    return;
+  }
+  const scope = currentStaffingScope;
+  if (!setupData.staffingRules[scope]) setupData.staffingRules[scope] = {};
+
+  let html = '<table style="width:100%; border-collapse:collapse; font-size:14px;">';
+  html += '<thead><tr><th style="text-align:right; padding:8px; border-bottom:2px solid #e2e8f0;">מחלקה</th>';
+  for (const [, st] of shifts) {
+    html += `<th style="text-align:center; padding:8px; border-bottom:2px solid #e2e8f0;">${st.name}</th>`;
+  }
+  html += '</tr></thead><tbody>';
+  for (const [dk, dept] of depts) {
+    if (!setupData.staffingRules[scope][dk]) setupData.staffingRules[scope][dk] = {};
+    html += `<tr><td style="padding:8px; font-weight:bold; border-bottom:1px solid #f1f5f9;">${dept.name}</td>`;
+    for (const [sk] of shifts) {
+      const val = setupData.staffingRules[scope][dk][sk] || 0;
+      html += `<td style="text-align:center; padding:6px; border-bottom:1px solid #f1f5f9;">
+        <input type="number" min="0" step="1" value="${val}"
+          style="width:60px; text-align:center; border:1.5px solid #e2e8f0; border-radius:6px; padding:4px;"
+          oninput="onStaffingChange('${scope}','${dk}','${sk}',this.value)">
+      </td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+function onStaffingChange(scope, deptKey, shiftKey, value) {
+  const n = parseInt(value, 10);
+  if (!setupData.staffingRules[scope]) setupData.staffingRules[scope] = {};
+  if (!setupData.staffingRules[scope][deptKey]) setupData.staffingRules[scope][deptKey] = {};
+  setupData.staffingRules[scope][deptKey][shiftKey] = Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+async function finishSetup() {
+  showMsg('s6-msg', '⏳ שומר...', 'info');
   try {
-    await db.ref(`branches/${branchKey}/org/constraintTypes`).set(setupData.constraintTypes);
+    // נקה אפסים לפני שמירה
+    const cleaned = {};
+    for (const [scope, scopeObj] of Object.entries(setupData.staffingRules)) {
+      const scopeClean = {};
+      for (const [dk, deptObj] of Object.entries(scopeObj)) {
+        const deptClean = {};
+        for (const [sk, val] of Object.entries(deptObj)) {
+          const n = parseInt(val, 10);
+          if (Number.isFinite(n) && n > 0) deptClean[sk] = n;
+        }
+        if (Object.keys(deptClean).length > 0) scopeClean[dk] = deptClean;
+      }
+      if (Object.keys(scopeClean).length > 0) cleaned[scope] = scopeClean;
+    }
+
+    if (Object.keys(cleaned).length > 0)
+      await db.ref(`branches/${branchKey}/staffingRules`).set(cleaned);
+
     await db.ref(`branches/${branchKey}/setupComplete`).set(true);
     await db.ref(`branches/${branchKey}/setupCompletedAt`).set(Date.now());
 
-    showMsg('s5-msg', '✅ הגדרה הושלמה! עובר לניהול...', 'success');
+    showMsg('s6-msg', '✅ הגדרה הושלמה! עובר לניהול...', 'success');
     setTimeout(() => { window.location.href = 'manager.html'; }, 1500);
   } catch (e) {
-    showMsg('s5-msg', '❌ שגיאה: ' + e.message, 'error');
+    showMsg('s6-msg', '❌ שגיאה: ' + e.message, 'error');
   }
 }
 
@@ -378,5 +460,6 @@ window.addEventListener('load', () => {
     if (currentStep === 5 && Object.keys(setupData.constraintTypes).length === 0) {
       loadDefaultConstraints();
     }
+    if (currentStep === 6) renderStaffingTable();
   }, 500);
 });

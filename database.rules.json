@@ -1,0 +1,14 @@
+{
+  "rules": {
+    "branches": {
+      "$branchId": {
+        ".read":  "auth != null && (auth.uid === $branchId || auth.uid === 'AgyppSpe0qZ6WZLf6zyBsDb0a5k1')",
+        ".write": "auth != null && (auth.uid === $branchId || auth.uid === 'AgyppSpe0qZ6WZLf6zyBsDb0a5k1')"
+      }
+    },
+    "branchCodes": {
+      ".read":  "auth != null",
+      ".write": "auth != null"
+    }
+  }
+}

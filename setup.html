@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>הגדרת סניף — ShiftSaaS</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -11,7 +11,7 @@
   <div class="app-logo">
     <span class="logo-icon">⚙️</span>
     <h1>הגדרת הסניף שלך</h1>
-    <p class="tagline">עקוב אחרי 5 השלבים הפשוטים</p>
+    <p class="tagline">עקוב אחרי 6 השלבים הפשוטים</p>
   </div>
 
   <!-- Progress Steps -->
@@ -35,6 +35,10 @@
     <div class="step" id="step-ind-5">
       <div class="step-num">5</div>
       <div class="step-label">אילוצים</div>
+    </div>
+    <div class="step" id="step-ind-6">
+      <div class="step-num">6</div>
+      <div class="step-label">שיבוץ</div>
     </div>
   </div>
 
@@ -219,9 +223,31 @@
 
     <div class="btn-row">
       <button class="btn secondary" onclick="goStep(4)">← חזרה</button>
-      <button class="btn success" onclick="finishSetup()">✅ סיים הגדרה — כניסה למערכת</button>
+      <button class="btn" onclick="saveStep5()">המשך ←</button>
     </div>
     <div id="s5-msg" class="message" style="display:none"></div>
+  </div>
+
+  <!-- ===== STEP 6: Staffing Rules ===== -->
+  <div id="step-6" class="section">
+    <h2>📊 דרישות שיבוץ</h2>
+    <p style="color:#888; margin-bottom:16px;">הגדר כמה עובדים נדרשים בכל משמרת לכל מחלקה. ניתן לשנות בכל עת מהגדרות.</p>
+
+    <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
+      <button class="btn sm success" id="s6-tab-weekday" onclick="setStaffingScope('weekday')">א׳–ה׳</button>
+      <button class="btn sm secondary" id="s6-tab-friday" onclick="setStaffingScope('friday')">שישי</button>
+      <button class="btn sm secondary" id="s6-tab-saturday" onclick="setStaffingScope('saturday')">שבת</button>
+    </div>
+
+    <div id="s6-table-wrap" style="overflow-x:auto; margin-bottom:10px;"></div>
+
+    <p style="color:#777; font-size:13px; margin-bottom:14px;">ערך 0 = לא נדרשים עובדים במשמרת זו</p>
+
+    <div class="btn-row">
+      <button class="btn secondary" onclick="goStep(5)">← חזרה</button>
+      <button class="btn success" onclick="finishSetup()">✅ סיים הגדרה — כניסה למערכת</button>
+    </div>
+    <div id="s6-msg" class="message" style="display:none"></div>
   </div>
 
 </div><!-- /container -->

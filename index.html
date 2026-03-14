@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>מערכת ניהול סידור עבודה</title>
   <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="manifest.json">
@@ -35,6 +35,9 @@
       <span class="icon">✨</span>
       הרשמה — עסק חדש
     </button>
+    <div style="text-align:center; margin-top:16px;">
+      <a href="help.html" style="color:#667eea; font-size:14px; text-decoration:none;">🆘 עזרה ותמיכה</a>
+    </div>
   </div>
 
   <!-- ===== REGISTER ===== -->
@@ -77,6 +80,9 @@
     </div>
     <button class="btn" onclick="doManagerLogin()">🔑 כניסה</button>
     <button class="btn secondary" onclick="showScreen('screen-landing')">← חזרה</button>
+    <div style="text-align:center; margin-top:12px;">
+      <a href="#" onclick="doForgotPassword()" style="color:#667eea; font-size:14px;">שכחתי סיסמה</a>
+    </div>
     <div id="mgr-login-msg" class="message" style="display:none"></div>
   </div>
 
@@ -173,8 +179,8 @@ async function doRegister() {
     await db.ref(`branches/${uid}/displayName`).set(name);
     await db.ref(`branches/${uid}/ownerEmail`).set(email);
 
-    showMsg('reg-msg', '✅ החשבון נוצר! מעביר לאשף ההגדרה...', 'success');
-    setTimeout(() => { window.location.href = 'setup.html'; }, 1500);
+    showMsg('reg-msg', '✅ החשבון נוצר! מעביר...', 'success');
+    setTimeout(() => { window.location.href = 'welcome.html'; }, 1500);
 
   } catch (e) {
     const msg = {
@@ -214,6 +220,24 @@ async function doManagerLogin() {
       'auth/user-not-found':  'אימייל לא קיים במערכת',
       'auth/wrong-password':  'סיסמה שגויה',
       'auth/invalid-email':   'כתובת אימייל לא תקינה'
+    }[e.code] || e.message;
+    showMsg('mgr-login-msg', '❌ ' + msg, 'error');
+  }
+}
+
+// ===========================================
+// Forgot Password
+// ===========================================
+async function doForgotPassword() {
+  const email = document.getElementById('mgr-email').value.trim();
+  if (!email) return showMsg('mgr-login-msg', 'הזן כתובת אימייל ולחץ שכחתי סיסמה', 'error');
+  try {
+    await auth.sendPasswordResetEmail(email);
+    showMsg('mgr-login-msg', '✅ אימייל לאיפוס סיסמה נשלח — בדוק את תיבת הדואר שלך', 'success');
+  } catch (e) {
+    const msg = {
+      'auth/user-not-found': 'האימייל לא קיים במערכת',
+      'auth/invalid-email':  'כתובת אימייל לא תקינה'
     }[e.code] || e.message;
     showMsg('mgr-login-msg', '❌ ' + msg, 'error');
   }

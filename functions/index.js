@@ -3,11 +3,51 @@
 // ===========================================
 const { onValueWritten } = require('firebase-functions/v2/database');
 const { onSchedule }     = require('firebase-functions/v2/scheduler');
+const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { initializeApp }  = require('firebase-admin/app');
 const { getDatabase }    = require('firebase-admin/database');
 const { getMessaging }   = require('firebase-admin/messaging');
+const { getAuth }        = require('firebase-admin/auth');
 
 initializeApp();
+
+const ADMIN_UID = 'AgyppSpe0qZ6WZLf6zyBsDb0a5k1';
+
+// ===========================================
+// מחיקת סניף מלאה (DB + Auth + branchCodes)
+// ===========================================
+exports.adminDeleteBranch = onCall({ region: 'europe-west1' }, async (request) => {
+  if (!request.auth || request.auth.uid !== ADMIN_UID) {
+    throw new HttpsError('permission-denied', 'גישה נדחתה');
+  }
+
+  const uid = request.data.uid;
+  if (!uid) throw new HttpsError('invalid-argument', 'חסר uid');
+
+  const db = getDatabase();
+
+  // מצא את קוד הסניף לפני המחיקה
+  const codeSnap = await db.ref('branches/' + uid + '/branchCode').get();
+  const branchCode = codeSnap.val();
+
+  // מחק נתוני הסניף מה-Database
+  await db.ref('branches/' + uid).remove();
+
+  // מחק את קוד הסניף
+  if (branchCode) {
+    await db.ref('branchCodes/' + branchCode).remove();
+  }
+
+  // מחק את חשבון ה-Auth
+  try {
+    await getAuth().deleteUser(uid);
+  } catch (e) {
+    // אם המשתמש כבר לא קיים — לא שגיאה
+    if (e.code !== 'auth/user-not-found') throw e;
+  }
+
+  return { success: true };
+});
 
 // ===========================================
 // עזר: שליחת push לכל עובדי הסניף
@@ -83,6 +123,40 @@ exports.sendManualPush = onValueWritten(
     const title = data.title || '🔔 ShiftSaaS';
     const body  = data.body  || 'הודעה מהמנהל';
     await sendPushToBranch(branchKey, title, body);
+    return null;
+  }
+);
+
+// ===========================================
+// שליחת push כשמנהל מפרסם סידור
+// מופעל כשנכתב: branches/{branchKey}/schedules/{weekKey}/status = 'published'
+// ===========================================
+exports.onSchedulePublished = onValueWritten(
+  { ref: 'branches/{branchKey}/schedules/{weekKey}/status', region: 'europe-west1' },
+  async function(event) {
+    const after = event.data.after.val();
+    if (after !== 'published') return null;
+
+    const branchKey = event.params.branchKey;
+    const weekKey   = event.params.weekKey; // format: YYYY-MM-DD (Sunday)
+
+    // Format week label in Hebrew
+    let weekLabel = '';
+    try {
+      const d     = new Date(weekKey + 'T12:00:00');
+      const start = d.toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric', timeZone: 'Asia/Jerusalem' });
+      const end   = new Date(d.getTime() + 6 * 86400000)
+                      .toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric', timeZone: 'Asia/Jerusalem' });
+      weekLabel = start + ' – ' + end;
+    } catch (e) {
+      weekLabel = weekKey;
+    }
+
+    await sendPushToBranch(
+      branchKey,
+      '📅 סידור עבודה פורסם',
+      'הסידור לשבוע ' + weekLabel + ' זמין כעת לצפייה'
+    );
     return null;
   }
 );

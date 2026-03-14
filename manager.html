@@ -2,7 +2,9 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, minimum-scale=0.3, maximum-scale=3.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=yes, minimum-scale=0.3, maximum-scale=3.0">
   <title>פורטל מנהל — ShiftSaaS</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -12,6 +14,17 @@
   <div id="screen-loading" class="section active" style="text-align:center; padding:60px 20px;">
     <div style="font-size:50px;">⏳</div>
     <p style="color:#888; margin-top:12px;">טוען נתונים...</p>
+  </div>
+
+  <div id="screen-welcome" class="section" style="padding:24px 0;">
+    <div style="text-align:center; margin-bottom:24px;">
+      <div style="font-size:52px;">👋</div>
+      <h2 style="margin-top:10px; margin-bottom:6px;">ברוכים הבאים לShiftSaaS!</h2>
+      <p style="color:#888; font-size:14px;">לפני שמתחילים, השלם את הגדרת הסניף שלך</p>
+    </div>
+    <div id="welcome-checklist"></div>
+    <button class="btn success" style="width:100%; margin-top:16px; font-size:15px;" onclick="window.location.href='setup.html'">🔧 הגדר את הסניף שלי</button>
+    <button class="btn secondary" style="width:100%; margin-top:8px;" onclick="skipWelcome()">דלג כרגע ←</button>
   </div>
 
   <div id="screen-expired" class="section" style="text-align:center; padding:60px 20px;">
@@ -29,6 +42,7 @@
       <div id="mgr-branch-code" style="color:#888; font-size:13px; text-align:center; margin-bottom:10px;"></div>
       <div style="display:flex; gap:8px;">
         <button class="btn sm secondary" style="flex:1; margin-top:0;" onclick="window.location.href='setup.html'">⚙️ הגדרות</button>
+        <button class="btn sm secondary" style="flex:1; margin-top:0;" onclick="window.location.href='help.html'">🆘 עזרה</button>
         <button class="btn sm danger" style="flex:1; margin-top:0;" onclick="logout()">יציאה</button>
       </div>
       <div id="admin-link-row" style="display:none; margin-top:8px;">
@@ -179,15 +193,25 @@
   </div><!-- /screen-main -->
 </div>
 
+<!-- popup עריכת משמרת -->
+<div id="shift-edit-popup" onclick="if(event.target===this)closeEditPopup()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:500;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:14px;padding:20px;width:88%;max-width:320px;box-shadow:0 8px 32px rgba(0,0,0,0.18);">
+    <h3 style="margin-bottom:4px;font-size:15px;">✏️ שנה משמרת</h3>
+    <div id="shift-edit-emp-name" style="color:#888;font-size:13px;margin-bottom:14px;"></div>
+    <div id="shift-edit-options" style="display:flex;flex-direction:column;gap:8px;"></div>
+    <button class="btn secondary" style="margin-top:14px;width:100%;" onclick="closeEditPopup()">ביטול</button>
+  </div>
+</div>
+
 <div style="position:fixed; bottom:8px; left:12px; font-size:11px; color:#bbb; pointer-events:none; user-select:none;">v1.1</div>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-<script src="js/firebase.js"></script>
-<script src="js/scheduler.js"></script>
+<script src="js/firebase.js?v=20260313"></script>
+<script src="js/scheduler.js?v=20260313"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
-<script src="js/manager.js"></script>
+<script src="js/manager.js?v=20260313"></script>
 <script>
 (function() {
   var scale = 1, startDist = 0, startScale = 1;
