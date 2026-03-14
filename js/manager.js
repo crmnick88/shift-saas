@@ -712,6 +712,51 @@ async function renderBranchInfo() {
     </div>
     <div>👥 <strong>מספר עובדים:</strong> ${Object.keys(orgData.employees || {}).length}</div>
   `;
+
+  renderSubscriptionInfo();
+}
+
+function renderSubscriptionInfo() {
+  const sub = orgData.subscription || {};
+  const status = sub.status || 'trial';
+  const now = Date.now();
+
+  let badgeColor, badgeText, expiryLine, daysLine, actionBtn;
+
+  if (status === 'blocked') {
+    badgeColor = '#ef4444'; badgeText = '🚫 חסום';
+    expiryLine = '';
+    daysLine   = '<p style="color:#ef4444; margin:8px 0;">החשבון חסום — אנא פנה לתמיכה.</p>';
+    actionBtn  = `<a href="https://wa.me/9720508724151" target="_blank" class="btn" style="background:#25D366; color:#fff; display:inline-block; text-decoration:none; margin-top:8px;">💬 פנה לתמיכה</a>`;
+
+  } else if (status === 'active') {
+    const paidUntil = sub.paidUntil || 0;
+    const daysLeft  = Math.ceil((paidUntil - now) / 86400000);
+    const dateStr   = paidUntil ? new Date(paidUntil).toLocaleDateString('he-IL') : '—';
+    badgeColor = '#22c55e'; badgeText = '✅ פעיל';
+    expiryLine = `<div style="margin-bottom:6px;">📅 <strong>תוקף עד:</strong> ${dateStr}</div>`;
+    daysLine   = paidUntil ? `<div style="margin-bottom:12px;">⏳ <strong>ימים שנותרו:</strong> ${daysLeft > 0 ? daysLeft : 'פג'}</div>` : '';
+    actionBtn  = `<a href="https://wa.me/9720508724151" target="_blank" class="btn secondary" style="display:inline-block; text-decoration:none; margin-top:4px;">💬 יצירת קשר לחידוש</a>`;
+
+  } else {
+    // trial
+    const trialEnds = sub.trialEnds || 0;
+    const daysLeft  = trialEnds ? Math.ceil((trialEnds - now) / 86400000) : '?';
+    const dateStr   = trialEnds ? new Date(trialEnds).toLocaleDateString('he-IL') : '—';
+    badgeColor = '#f59e0b'; badgeText = '🕐 ניסיון חינם';
+    expiryLine = `<div style="margin-bottom:6px;">📅 <strong>ניסיון עד:</strong> ${dateStr}</div>`;
+    daysLine   = `<div style="margin-bottom:12px;">⏳ <strong>ימים שנותרו:</strong> ${daysLeft > 0 ? daysLeft : 'פג'}</div>`;
+    actionBtn  = `<a href="https://wa.me/9720508724151" target="_blank" class="btn" style="background:#667eea; color:#fff; display:inline-block; text-decoration:none; margin-top:4px;">💳 שדרג למנוי מלא</a>`;
+  }
+
+  document.getElementById('settings-subscription-info').innerHTML = `
+    <div style="margin-bottom:12px;">
+      <span style="background:${badgeColor}; color:#fff; padding:4px 12px; border-radius:20px; font-size:13px; font-weight:bold;">${badgeText}</span>
+    </div>
+    ${expiryLine}
+    ${daysLine}
+    ${actionBtn}
+  `;
 }
 
 
@@ -947,6 +992,102 @@ async function _shareExcelWithCapacitor(blob, fileName) {
     if (String(e?.message || '').toLowerCase().includes('cancel')) return true;
     console.warn('Capacitor export/share failed:', e);
     return false;
+  }
+}
+
+// ===========================================
+// EXPORT MODAL
+// ===========================================
+function showExportModal() {
+  const modal = document.getElementById('export-modal');
+  modal.style.display = 'flex';
+}
+function closeExportModal() {
+  document.getElementById('export-modal').style.display = 'none';
+}
+
+// ===========================================
+// PDF EXPORT (html2canvas screenshot approach — supports Hebrew)
+// ===========================================
+async function exportToPDF() {
+  if (!currentScheduleData || Object.keys(currentScheduleData).length === 0)
+    return showMsg('schedule-msg', 'אין סידור לייצוא', 'error');
+
+  if (!window.html2canvas)
+    return showMsg('schedule-msg', 'ספריית PDF לא נטענה, נסה שוב עוד רגע', 'error');
+
+  const jspdfLib = window.jspdf || (window.jsPDF ? { jsPDF: window.jsPDF } : null);
+  if (!jspdfLib || !jspdfLib.jsPDF)
+    return showMsg('schedule-msg', 'ספריית PDF לא נטענה, נסה שוב עוד רגע', 'error');
+
+  const weekLabel = formatWeekLabel(currentWeekOffset);
+  const fileName  = `סידור_${weekLabel.replace(' — ', '_').replace(/\//g, '-')}.pdf`;
+
+  // Find the schedule table in the DOM
+  const tableEl = document.querySelector('#schedule-container table');
+  if (!tableEl) return showMsg('schedule-msg', 'לא נמצאה טבלת סידור', 'error');
+
+  showMsg('schedule-msg', '⏳ מכין PDF...', 'info');
+
+  try {
+    // Capture the table as a canvas image (preserves Hebrew text via browser rendering)
+    const canvas = await html2canvas(tableEl, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      logging: false,
+    });
+
+    const imgData   = canvas.toDataURL('image/png');
+    const imgWidth  = canvas.width;
+    const imgHeight = canvas.height;
+
+    // Choose orientation based on aspect ratio
+    const isLandscape = imgWidth > imgHeight;
+    const { jsPDF } = jspdfLib;
+    const doc = new jsPDF({ orientation: isLandscape ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
+
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const margin = 8;
+    const maxW = pageW - margin * 2;
+    const maxH = pageH - margin * 2;
+
+    // Scale image to fit page width
+    const fitW   = maxW;
+    const fitH   = (imgHeight / imgWidth) * fitW;
+    const startY = Math.max(margin, (pageH - fitH) / 2);
+
+    doc.addImage(imgData, 'PNG', margin, fitH <= maxH ? startY : margin, fitW, Math.min(fitH, maxH));
+
+    let blob;
+    try {
+      blob = doc.output('blob');
+    } catch(e) {
+      return showMsg('schedule-msg', 'שגיאה ביצירת PDF: ' + e.message, 'error');
+    }
+
+    // Capacitor native share (APK)
+    if (await _shareExcelWithCapacitor(blob, fileName)) return;
+
+    // Web Share API
+    if (window.File && navigator.canShare && navigator.share) {
+      try {
+        const fileObj = new File([blob], fileName, { type: 'application/pdf' });
+        if (navigator.canShare({ files: [fileObj] })) {
+          await navigator.share({ files: [fileObj], title: 'סידור עבודה' });
+          return;
+        }
+      } catch (err) {
+        if (err?.name === 'AbortError') return;
+      }
+    }
+
+    // Fallback: anchor download
+    _downloadBlob(blob, fileName);
+
+  } catch(e) {
+    showMsg('schedule-msg', 'שגיאה בייצוא PDF: ' + e.message, 'error');
   }
 }
 

@@ -78,7 +78,7 @@
         </div>
         <div style="display:flex; gap:8px;">
           <button class="btn sm success" style="flex:1; margin-top:0;" onclick="publishSchedule()">📢 פרסם</button>
-          <button class="btn sm secondary" style="flex:1; margin-top:0;" onclick="exportToExcel()">📊 אקסל</button>
+          <button class="btn sm secondary" style="flex:1; margin-top:0;" onclick="showExportModal()">📤 ייצוא</button>
         </div>
       </div>
 
@@ -181,16 +181,33 @@
         <div id="settings-branch-info"></div>
       </div>
       <div class="card" style="margin-top:14px;">
+        <h3>💳 מנוי</h3>
+        <div id="settings-subscription-info">טוען...</div>
+      </div>
+      <div class="card" style="margin-top:14px;">
         <h3>⚙️ הגדרות מערכת</h3>
         <a href="setup.html" class="btn secondary" style="display:inline-block; width:auto; text-decoration:none; padding:10px 20px;">🔧 ערוך הגדרות סניף</a>
-      <a href="staffing.html" class="btn secondary" style="display:inline-block; width:auto; text-decoration:none; padding:10px 20px; margin-right:8px;">📊 דרישות שיבוץ</a>
-      <a href="push-settings.html" class="btn" style="display:inline-block; width:auto; text-decoration:none; padding:10px 20px; margin-right:8px; background:#f6ad55; color:#fff;">🔔 הגדרות התראות</a>
+        <a href="staffing.html" class="btn secondary" style="display:inline-block; width:auto; text-decoration:none; padding:10px 20px; margin-right:8px;">📊 דרישות שיבוץ</a>
+        <a href="push-settings.html" class="btn" style="display:inline-block; width:auto; text-decoration:none; padding:10px 20px; margin-right:8px; background:#f6ad55; color:#fff;">🔔 הגדרות התראות</a>
       </div>
     </div>
 
     </div>
 
   </div><!-- /screen-main -->
+</div>
+
+<!-- popup ייצוא -->
+<div id="export-modal" onclick="if(event.target===this)closeExportModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:500;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:14px;padding:24px;width:88%;max-width:300px;box-shadow:0 8px 32px rgba(0,0,0,0.18);text-align:center;">
+    <h3 style="margin-bottom:6px;">📤 ייצוא סידור</h3>
+    <p style="color:#888;font-size:13px;margin-bottom:20px;">בחר פורמט לייצוא</p>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <button class="btn success" onclick="closeExportModal();exportToExcel()">📊 ייצוא לאקסל</button>
+      <button class="btn" style="background:#e74c3c;" onclick="closeExportModal();exportToPDF()">📄 ייצוא ל-PDF</button>
+    </div>
+    <button class="btn secondary" style="margin-top:10px;" onclick="closeExportModal()">ביטול</button>
+  </div>
 </div>
 
 <!-- popup עריכת משמרת -->
@@ -208,10 +225,12 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-<script src="js/firebase.js?v=20260313"></script>
-<script src="js/scheduler.js?v=20260313"></script>
+<script src="js/firebase.js?v=20260314"></script>
+<script src="js/scheduler.js?v=20260314"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
-<script src="js/manager.js?v=20260313"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="js/manager.js?v=20260317"></script>
 <script>
 (function() {
   var scale = 1, startDist = 0, startScale = 1;
